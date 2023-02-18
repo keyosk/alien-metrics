@@ -1,3 +1,13 @@
+use hyper::{
+    header::CONTENT_TYPE,
+    service::{make_service_fn, service_fn},
+    Body, Request, Response, Server,
+};
+use prometheus::{Counter, Encoder, Gauge, HistogramVec, TextEncoder};
+
+use lazy_static::lazy_static;
+use prometheus::{labels, opts, register_counter, register_gauge, register_histogram_vec};
+
 use once_cell::sync::Lazy;
 use reqwest::{cookie::Jar, Client, Url};
 use serde::{Deserialize, Serialize};
@@ -7,7 +17,6 @@ use std::{
     env,
     fs::File,
     io::{BufRead, BufReader, Write},
-    thread, time,
 };
 use thiserror::Error;
 
@@ -16,17 +25,25 @@ static LOGIN_PASSWORD: Lazy<String> =
 static BRIDGE_IP: Lazy<String> =
     Lazy::new(|| env::var("BRIDGE_IP").unwrap_or(String::from("192.168.188.1")));
 
-fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
-    match input.find(open) {
-        Some(index) => {
-            let start = index + open.len();
-            match input[start..].find(close) {
-                Some(index) if index > 0 => Some(&input[start..start + index]),
-                _ => None,
-            }
-        }
-        None => None,
-    }
+lazy_static! {
+    static ref HTTP_COUNTER: Counter = register_counter!(opts!(
+        "example_http_requests_total",
+        "Number of HTTP requests made.",
+        labels! {"handler" => "all",}
+    ))
+    .unwrap();
+    static ref HTTP_BODY_GAUGE: Gauge = register_gauge!(opts!(
+        "example_http_response_size_bytes",
+        "The HTTP response sizes in bytes.",
+        labels! {"handler" => "all",}
+    ))
+    .unwrap();
+    static ref HTTP_REQ_HISTOGRAM: HistogramVec = register_histogram_vec!(
+        "example_http_request_duration_seconds",
+        "The HTTP request latencies in seconds.",
+        &["handler"]
+    )
+    .unwrap();
 }
 
 #[derive(Error, Debug)]
@@ -49,8 +66,81 @@ pub enum AlienError {
     DevicesParseError,
     #[error("metrics parse error")]
     MetricsParseError(#[from] serde_json::Error),
+    #[error("server error")]
+    ServerError(#[from] hyper::Error),
+    #[error("server 2 error")]
+    Server2Error(#[from] hyper::http::Error),
+    #[error("server 3 error")]
+    Server3Error(#[from] prometheus::Error),
     #[error("unknown error")]
     Unknown,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouterInfo {
+    pub cost: i64,
+    pub friendly_name: String,
+    pub ip: String,
+    pub level: i64,
+    pub mac: String,
+    pub platform_name: String,
+    pub protocol: i64,
+    pub region_lock: String,
+    pub role: String,
+    pub uptime: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "PascalCase")]
+pub struct Device {
+    pub address: String,
+    pub description: String,
+    pub happiness_score: u64,
+    pub host_name: String,
+    pub inactive: u64,
+    pub lease_validity: u64,
+    pub max_bandwidth: u64,
+    pub max_spatial_streams: u64,
+    pub mode: String,
+    pub radio_mode: String,
+    pub rx_bitrate: u64,
+    pub rx_bytes: u64,
+    #[serde(rename = "RxBytes_5sec")]
+    pub rx_bytes_5sec: u64,
+    #[serde(rename = "RxBytes_15sec")]
+    pub rx_bytes_15sec: u64,
+    #[serde(rename = "RxBytes_30sec")]
+    pub rx_bytes_30sec: u64,
+    #[serde(rename = "RxBytes_60sec")]
+    pub rx_bytes_60sec: u64,
+    pub rx_mcs: u64,
+    pub rx_mhz: u64,
+    pub signal_quality: u64,
+    pub tx_bitrate: u64,
+    pub tx_bytes: u64,
+    #[serde(rename = "TxBytes_5sec")]
+    pub tx_bytes_5sec: u64,
+    #[serde(rename = "TxBytes_15sec")]
+    pub tx_bytes_15sec: u64,
+    #[serde(rename = "TxBytes_30sec")]
+    pub tx_bytes_30sec: u64,
+    #[serde(rename = "TxBytes_60sec")]
+    pub tx_bytes_60sec: u64,
+    pub tx_mcs: u64,
+    pub tx_mhz: u64,
+}
+
+fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
+    match input.find(open) {
+        Some(index) => {
+            let start = index + open.len();
+            match input[start..].find(close) {
+                Some(index) if index > 0 => Some(&input[start..start + index]),
+                _ => None,
+            }
+        }
+        None => None,
+    }
 }
 
 async fn login(client: &Client) -> Result<(), AlienError> {
@@ -155,60 +245,6 @@ async fn get_metrics(
     Ok(res)
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RouterInfo {
-    pub cost: i64,
-    pub friendly_name: String,
-    pub ip: String,
-    pub level: i64,
-    pub mac: String,
-    pub platform_name: String,
-    pub protocol: i64,
-    pub region_lock: String,
-    pub role: String,
-    pub uptime: i64,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "PascalCase")]
-pub struct Device {
-    pub address: String,
-    pub description: String,
-    pub happiness_score: u64,
-    pub host_name: String,
-    pub inactive: u64,
-    pub lease_validity: u64,
-    pub max_bandwidth: u64,
-    pub max_spatial_streams: u64,
-    pub mode: String,
-    pub radio_mode: String,
-    pub rx_bitrate: u64,
-    pub rx_bytes: u64,
-    #[serde(rename = "RxBytes_5sec")]
-    pub rx_bytes_5sec: u64,
-    #[serde(rename = "RxBytes_15sec")]
-    pub rx_bytes_15sec: u64,
-    #[serde(rename = "RxBytes_30sec")]
-    pub rx_bytes_30sec: u64,
-    #[serde(rename = "RxBytes_60sec")]
-    pub rx_bytes_60sec: u64,
-    pub rx_mcs: u64,
-    pub rx_mhz: u64,
-    pub signal_quality: u64,
-    pub tx_bitrate: u64,
-    pub tx_bytes: u64,
-    #[serde(rename = "TxBytes_5sec")]
-    pub tx_bytes_5sec: u64,
-    #[serde(rename = "TxBytes_15sec")]
-    pub tx_bytes_15sec: u64,
-    #[serde(rename = "TxBytes_30sec")]
-    pub tx_bytes_30sec: u64,
-    #[serde(rename = "TxBytes_60sec")]
-    pub tx_bytes_60sec: u64,
-    pub tx_mcs: u64,
-    pub tx_mhz: u64,
-}
-
 fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
     let mut res_array = res.iter();
 
@@ -277,10 +313,13 @@ fn get_client_with_no_cookie() -> Result<Client, AlienError> {
     Ok(reqwest::Client::builder().cookie_store(true).build()?)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), AlienError> {
-    let one_sec = time::Duration::from_secs(1);
-    let thirty_secs = time::Duration::from_secs(30);
+async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
+    let encoder = TextEncoder::new();
+
+    HTTP_COUNTER.inc();
+    let timer = HTTP_REQ_HISTOGRAM.with_label_values(&["all"]).start_timer();
+
+    // START METRICS PULL
 
     // Default client
     let mut client = get_client_with_no_cookie()?;
@@ -295,7 +334,7 @@ async fn main() -> Result<(), AlienError> {
         login(&client).await?;
     }
 
-    let mut metrics_token = {
+    let metrics_token = {
         // It's possible the session cookie retrieved is expired
         // If this result is not ok, let the re-login in the loop occur
         let metrics_token_result = get_metrics_token(&client).await;
@@ -306,17 +345,40 @@ async fn main() -> Result<(), AlienError> {
         }
     };
 
-    loop {
-        let metrics = get_metrics(&client, metrics_token.as_str()).await;
+    let metrics = get_metrics(&client, metrics_token.as_str()).await;
 
-        if metrics.is_ok() {
-            print_metrics(metrics?)?;
-            thread::sleep(thirty_secs);
-        } else {
-            println!("DEBUG: Session expired. Logging in again");
-            login(&client).await?;
-            metrics_token = get_metrics_token(&client).await?;
-            thread::sleep(one_sec);
+    if metrics.is_ok() {
+        if print_metrics(metrics?).is_err() {
+            eprintln!("parse metrics error");
         }
+    } else {
+        eprintln!("bad cached login... TODO... burn cache and re-login");
     }
+    // END METRICS PULL
+
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    encoder.encode(&metric_families, &mut buffer)?;
+    HTTP_BODY_GAUGE.set(buffer.len() as f64);
+
+    let response = Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))?;
+
+    timer.observe_duration();
+
+    Ok(response)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), AlienError> {
+    let addr = ([0, 0, 0, 0], 9898).into();
+    println!("Listening on http://{}", addr);
+
+    let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
+        Ok::<_, AlienError>(service_fn(serve_req))
+    }));
+
+    Ok(serve_future.await?)
 }
