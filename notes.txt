@@ -1,5 +1,5 @@
 export ROUTER_PASSWORD='BLAH'
-export ROUTER_PASSWORD='192.168.188.1'
+export BRIDGE_IP='192.168.188.1'
 
 # step 1, get token
 

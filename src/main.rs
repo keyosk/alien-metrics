@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 use reqwest::{cookie::Jar, Client, Url};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     env,
@@ -30,22 +31,24 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
 #[derive(Error, Debug)]
 pub enum AlienError {
     #[error("reqwest error")]
-    ReqwestSad(#[from] reqwest::Error),
+    ReqwestError(#[from] reqwest::Error),
     #[error("token cache r/w error")]
-    FileSad(#[from] std::io::Error),
-    #[error("bad BRIDGE_IP config")]
-    BridgeIPSad(#[from] url::ParseError),
-    #[error("cookie probs")]
-    CookieSad(#[from] reqwest::header::ToStrError),
-    #[error("Could not parse metrics token")]
-    MetricsTokenMissing,
-    #[error("Invalid Password")]
-    BadPassword(String),
-    #[error("Could not parse login token")]
-    LoginTokenMissing(String),
-    #[error("unable to parse Alien devices response")]
+    TokenCacheError(#[from] std::io::Error),
+    #[error("env BRIDGE_IP error")]
+    BridgeIPError(#[from] url::ParseError),
+    #[error("login error")]
+    CookieError(#[from] reqwest::header::ToStrError),
+    #[error("metrics token missing error")]
+    MetricsTokenMissingError,
+    #[error("invalid password error")]
+    InvalidPasswordError(String),
+    #[error("login token missing error")]
+    LoginTokenMissingError(String),
+    #[error("devices list parse error")]
     DevicesParseError,
-    #[error("unknown alien error")]
+    #[error("metrics parse error")]
+    MetricsParseError(#[from] serde_json::Error),
+    #[error("unknown error")]
     Unknown,
 }
 
@@ -63,7 +66,9 @@ async fn login(client: &Client) -> Result<(), AlienError> {
         .await?;
 
     let login_token = find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
-        .ok_or(AlienError::LoginTokenMissing(login_token_response.clone()))?;
+        .ok_or(AlienError::LoginTokenMissingError(
+            login_token_response.clone(),
+        ))?;
 
     // Step 2: Login and get session cookie
 
@@ -81,7 +86,9 @@ async fn login(client: &Client) -> Result<(), AlienError> {
     let login_cookie = res
         .headers()
         .get("set-cookie")
-        .ok_or(AlienError::BadPassword(String::from("No cookie returned")))?;
+        .ok_or(AlienError::InvalidPasswordError(String::from(
+            "No cookie returned",
+        )))?;
 
     let path = "cookie.txt";
     let mut output = File::create(path)?;
@@ -96,9 +103,13 @@ async fn login(client: &Client) -> Result<(), AlienError> {
     {
         Ok(())
     } else if res_text.contains("URL='login.php'") {
-        Err(AlienError::BadPassword(String::from("Invalid password")))
+        Err(AlienError::InvalidPasswordError(String::from(
+            "Invalid password",
+        )))
     } else {
-        Err(AlienError::BadPassword(String::from("Unexpected response")))
+        Err(AlienError::InvalidPasswordError(String::from(
+            "Unexpected response",
+        )))
     }
 }
 
@@ -116,7 +127,7 @@ async fn get_metrics_token(client: &Client) -> Result<String, AlienError> {
         .await?;
 
     let metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
-        .ok_or(AlienError::MetricsTokenMissing)?;
+        .ok_or(AlienError::MetricsTokenMissingError)?;
 
     Ok(String::from(metrics_token))
 }
@@ -138,6 +149,60 @@ async fn get_metrics(client: &Client, metrics_token: &str) -> Result<Value, Alie
         .await?;
 
     Ok(res)
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Device {
+    #[serde(default = "default_resource_string")]
+    pub address: String,
+    #[serde(default = "default_resource_string")]
+    pub description: String,
+    pub happiness_score: u64,
+    #[serde(default = "default_resource_string")]
+    pub host_name: String,
+    pub inactive: u64,
+    #[serde(default = "default_resource_u64")]
+    pub lease_validity: u64,
+    pub max_bandwidth: u64,
+    pub max_spatial_streams: u64,
+    #[serde(default = "default_resource_string")]
+    pub mode: String,
+    #[serde(default = "default_resource_string")]
+    pub radio_mode: String,
+    pub rx_bitrate: u64,
+    pub rx_bytes: u64,
+    #[serde(rename = "RxBytes_5sec", default = "default_resource_u64")]
+    pub rx_bytes_5sec: u64,
+    #[serde(rename = "RxBytes_15sec", default = "default_resource_u64")]
+    pub rx_bytes_15sec: u64,
+    #[serde(rename = "RxBytes_30sec", default = "default_resource_u64")]
+    pub rx_bytes_30sec: u64,
+    #[serde(rename = "RxBytes_60sec", default = "default_resource_u64")]
+    pub rx_bytes_60sec: u64,
+    pub rx_mcs: u64,
+    pub rx_mhz: u64,
+    pub signal_quality: u64,
+    pub tx_bitrate: u64,
+    pub tx_bytes: u64,
+    #[serde(rename = "TxBytes_5sec", default = "default_resource_u64")]
+    pub tx_bytes_5sec: u64,
+    #[serde(rename = "TxBytes_15sec", default = "default_resource_u64")]
+    pub tx_bytes_15sec: u64,
+    #[serde(rename = "TxBytes_30sec", default = "default_resource_u64")]
+    pub tx_bytes_30sec: u64,
+    #[serde(rename = "TxBytes_60sec", default = "default_resource_u64")]
+    pub tx_bytes_60sec: u64,
+    pub tx_mcs: u64,
+    pub tx_mhz: u64,
+}
+
+fn default_resource_string() -> String {
+    String::from("")
+}
+
+fn default_resource_u64() -> u64 {
+    0
 }
 
 fn print_metrics(res: Value) -> Result<(), AlienError> {
@@ -178,8 +243,9 @@ fn print_metrics(res: Value) -> Result<(), AlienError> {
             .ok_or(AlienError::DevicesParseError)?;
 
         for (device_mac, device) in devices {
+            let d: Device = serde_json::from_value(device.to_owned())?;
             println!("device_mac: {:?}", device_mac);
-            println!("device: {:?}\n", device);
+            println!("{:?}\n", d);
         }
         println!("---");
     }
