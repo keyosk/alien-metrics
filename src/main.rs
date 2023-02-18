@@ -3,14 +3,11 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
-use prometheus::{Counter, Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder};
-
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use prometheus::{
     labels, opts, register_counter, register_gauge, register_gauge_vec, register_histogram_vec,
+    Counter, Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder,
 };
-
-use once_cell::sync::Lazy;
 use reqwest::{cookie::Jar, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,32 +24,49 @@ static LOGIN_PASSWORD: Lazy<String> =
 static BRIDGE_IP: Lazy<String> =
     Lazy::new(|| env::var("BRIDGE_IP").unwrap_or(String::from("192.168.188.1")));
 
-lazy_static! {
-    static ref HTTP_COUNTER: Counter = register_counter!(opts!(
-        "example_http_requests_total",
+static HTTP_COUNTER: Lazy<Counter> = Lazy::new(|| {
+    register_counter!(opts!(
+        "http_requests_total",
         "Number of HTTP requests made.",
         labels! {"handler" => "all",}
     ))
-    .unwrap();
-    static ref HTTP_BODY_GAUGE: Gauge = register_gauge!(opts!(
-        "example_http_response_size_bytes",
+    .unwrap()
+});
+
+static HTTP_BODY_GAUGE: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(opts!(
+        "http_response_size_bytes",
         "The HTTP response sizes in bytes.",
         labels! {"handler" => "all",}
     ))
-    .unwrap();
-    static ref HTTP_REQ_HISTOGRAM: HistogramVec = register_histogram_vec!(
-        "example_http_request_duration_seconds",
+    .unwrap()
+});
+
+static HTTP_REQ_HISTOGRAM: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
+        "http_request_duration_seconds",
         "The HTTP request latencies in seconds.",
         &["handler"]
     )
-    .unwrap();
-    static ref DEVICE_HAPPINESS: GaugeVec = register_gauge_vec!(
+    .unwrap()
+});
+
+static SCRAPE_COUNTER: Lazy<Counter> = Lazy::new(|| {
+    register_counter!(opts!(
+        "scrape_requests_total",
+        "Number of times scraped alien metrics endpoint.",
+    ))
+    .unwrap()
+});
+
+static DEVICE_HAPPINESS: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec!(
         "device_happiness",
         "The Happiness score of each device.",
         &["mac", "name"]
     )
-    .unwrap();
-}
+    .unwrap()
+});
 
 #[derive(Error, Debug)]
 pub enum AlienError {
@@ -267,7 +281,7 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
             .to_owned(),
     )?;
 
-    println!("router_info: {:?}", ri);
+    // println!("router_info: {:?}", ri);
 
     // remove the second item from res_array, it's a complex map of devices
     let frequencies: HashMap<String, HashMap<String, HashMap<String, Device>>> =
@@ -280,15 +294,15 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
                 .to_owned(),
         )?;
 
-    for (frequency, devices_by_frequency) in frequencies {
-        println!("\nfrequency: {:?}\n", frequency);
+    for (_frequency, devices_by_frequency) in frequencies {
+        // println!("\nfrequency: {:?}\n", frequency);
 
         let devices = devices_by_frequency
             .get("User network")
             .ok_or(AlienError::DevicesParseError)?;
 
         for (device_mac, device) in devices {
-            println!("{} = {:?}\n", device_mac, device);
+            // println!("{} = {:?}\n", device_mac, device);
             DEVICE_HAPPINESS
                 .with_label_values(&[device_mac, {
                     if !device.description.is_empty() {
@@ -301,7 +315,7 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
                 }])
                 .set(device.happiness_score as f64)
         }
-        println!("---");
+        // println!("---");
     }
     Ok(())
 }
@@ -382,6 +396,7 @@ async fn main_loop() -> Result<(), AlienError> {
     };
 
     loop {
+        SCRAPE_COUNTER.inc();
         let metrics = get_metrics(&client, metrics_token.as_str()).await;
 
         if metrics.is_ok() {

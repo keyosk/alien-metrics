@@ -7,7 +7,6 @@ name = "alien-metrics"
 version = "0.1.0"
 dependencies = [
  "hyper",
- "lazy_static",
  "once_cell",
  "prometheus",
  "reqwest",
