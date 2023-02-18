@@ -1,0 +1,38 @@
+export ROUTER_PASSWORD='BLAH'
+export ROUTER_PASSWORD='192.168.188.1'
+
+# step 1, get token
+
+curl -s "http://${BRIDGE_IP}/login.php" | grep 'token'
+
+# it is hiding in the dom, like so:
+
+# <input type='hidden' name='token' value='REPLACE_ME'>
+
+export LOGIN_TOKEN='REPLACE_ME'
+
+###
+
+# step 2, use token to login and get cookie
+
+curl -i -s "http://${BRIDGE_IP}/login.php" -X POST -H 'Content-Type: application/x-www-form-urlencoded' --data-raw "token=${LOGIN_TOKEN}&password=${ROUTER_PASSWORD}" | grep 'Set-Cookie'
+
+# Set-Cookie: webui-session=REPLACE_ME_AGAIN
+
+export SESSION_COOKIE='REPLACE_ME_AGAIN'
+
+###
+
+# step 3, get NEW token
+
+curl -s "http://${BRIDGE_IP}/info.php" -H "Cookie: webui-session=${SESSION_COOKIE}" | grep token
+
+# var token='REPLACE_ME_YET_AGAIN'
+
+export METRICS_TOKEN='REPLACE_ME_YET_AGAIN'
+
+###
+
+# step 4, pull json
+
+curl -s "http://${BRIDGE_IP}/info-async.php" -X POST -H "Cookie: webui-session=${SESSION_COOKIE}" --data-raw "do=full&token=${METRICS_TOKEN}" ; echo
