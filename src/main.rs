@@ -170,57 +170,43 @@ pub struct RouterInfo {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[serde(default, rename_all = "PascalCase")]
 pub struct Device {
-    #[serde(default = "default_resource_string")]
     pub address: String,
-    #[serde(default = "default_resource_string")]
     pub description: String,
     pub happiness_score: u64,
-    #[serde(default = "default_resource_string")]
     pub host_name: String,
     pub inactive: u64,
-    #[serde(default = "default_resource_u64")]
     pub lease_validity: u64,
     pub max_bandwidth: u64,
     pub max_spatial_streams: u64,
-    #[serde(default = "default_resource_string")]
     pub mode: String,
-    #[serde(default = "default_resource_string")]
     pub radio_mode: String,
     pub rx_bitrate: u64,
     pub rx_bytes: u64,
-    #[serde(rename = "RxBytes_5sec", default = "default_resource_u64")]
+    #[serde(rename = "RxBytes_5sec")]
     pub rx_bytes_5sec: u64,
-    #[serde(rename = "RxBytes_15sec", default = "default_resource_u64")]
+    #[serde(rename = "RxBytes_15sec")]
     pub rx_bytes_15sec: u64,
-    #[serde(rename = "RxBytes_30sec", default = "default_resource_u64")]
+    #[serde(rename = "RxBytes_30sec")]
     pub rx_bytes_30sec: u64,
-    #[serde(rename = "RxBytes_60sec", default = "default_resource_u64")]
+    #[serde(rename = "RxBytes_60sec")]
     pub rx_bytes_60sec: u64,
     pub rx_mcs: u64,
     pub rx_mhz: u64,
     pub signal_quality: u64,
     pub tx_bitrate: u64,
     pub tx_bytes: u64,
-    #[serde(rename = "TxBytes_5sec", default = "default_resource_u64")]
+    #[serde(rename = "TxBytes_5sec")]
     pub tx_bytes_5sec: u64,
-    #[serde(rename = "TxBytes_15sec", default = "default_resource_u64")]
+    #[serde(rename = "TxBytes_15sec")]
     pub tx_bytes_15sec: u64,
-    #[serde(rename = "TxBytes_30sec", default = "default_resource_u64")]
+    #[serde(rename = "TxBytes_30sec")]
     pub tx_bytes_30sec: u64,
-    #[serde(rename = "TxBytes_60sec", default = "default_resource_u64")]
+    #[serde(rename = "TxBytes_60sec")]
     pub tx_bytes_60sec: u64,
     pub tx_mcs: u64,
     pub tx_mhz: u64,
-}
-
-fn default_resource_string() -> String {
-    String::from("")
-}
-
-fn default_resource_u64() -> u64 {
-    0
 }
 
 fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
@@ -237,7 +223,7 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
             .to_owned(),
     )?;
 
-    println!("router_mac: {:?}", ri.mac);
+    println!("router_info: {:?}", ri);
 
     // remove the second item from res_array, it's a complex map of devices
     let frequencies: HashMap<String, HashMap<String, HashMap<String, Device>>> =
