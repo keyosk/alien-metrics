@@ -59,10 +59,28 @@ static SCRAPE_COUNTER: Lazy<Counter> = Lazy::new(|| {
     .unwrap()
 });
 
-static DEVICE_HAPPINESS: Lazy<GaugeVec> = Lazy::new(|| {
+static DEVICE_HAPPINESS_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
     register_gauge_vec!(
         "device_happiness",
         "The Happiness score of each device.",
+        &["mac", "name"]
+    )
+    .unwrap()
+});
+
+static DEVICE_RX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec!(
+        "device_rx_bitrate",
+        "The rx bitrate of each device.",
+        &["mac", "name"]
+    )
+    .unwrap()
+});
+
+static DEVICE_TX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec!(
+        "device_tx_bitrate",
+        "The tx bitrate of each device.",
         &["mac", "name"]
     )
     .unwrap()
@@ -117,39 +135,55 @@ pub struct RouterInfo {
 pub struct Device {
     pub address: String,
     pub description: String,
-    pub happiness_score: u64,
+    pub happiness_score: f64,
     pub host_name: String,
-    pub inactive: u64,
-    pub lease_validity: u64,
-    pub max_bandwidth: u64,
-    pub max_spatial_streams: u64,
+    pub inactive: f64,
+    pub lease_validity: f64,
+    pub max_bandwidth: f64,
+    pub max_spatial_streams: f64,
     pub mode: String,
     pub radio_mode: String,
-    pub rx_bitrate: u64,
-    pub rx_bytes: u64,
+    pub rx_bitrate: f64,
+    pub rx_bytes: f64,
     #[serde(rename = "RxBytes_5sec")]
-    pub rx_bytes_5sec: u64,
+    pub rx_bytes_5sec: f64,
     #[serde(rename = "RxBytes_15sec")]
-    pub rx_bytes_15sec: u64,
+    pub rx_bytes_15sec: f64,
     #[serde(rename = "RxBytes_30sec")]
-    pub rx_bytes_30sec: u64,
+    pub rx_bytes_30sec: f64,
     #[serde(rename = "RxBytes_60sec")]
-    pub rx_bytes_60sec: u64,
-    pub rx_mcs: u64,
-    pub rx_mhz: u64,
-    pub signal_quality: u64,
-    pub tx_bitrate: u64,
-    pub tx_bytes: u64,
+    pub rx_bytes_60sec: f64,
+    pub rx_mcs: f64,
+    pub rx_mhz: f64,
+    pub signal_quality: f64,
+    pub tx_bitrate: f64,
+    pub tx_bytes: f64,
     #[serde(rename = "TxBytes_5sec")]
-    pub tx_bytes_5sec: u64,
+    pub tx_bytes_5sec: f64,
     #[serde(rename = "TxBytes_15sec")]
-    pub tx_bytes_15sec: u64,
+    pub tx_bytes_15sec: f64,
     #[serde(rename = "TxBytes_30sec")]
-    pub tx_bytes_30sec: u64,
+    pub tx_bytes_30sec: f64,
     #[serde(rename = "TxBytes_60sec")]
-    pub tx_bytes_60sec: u64,
-    pub tx_mcs: u64,
-    pub tx_mhz: u64,
+    pub tx_bytes_60sec: f64,
+    pub tx_mcs: f64,
+    pub tx_mhz: f64,
+}
+
+pub trait DeviceInfo {
+    fn get_name(&self) -> &String;
+}
+
+impl DeviceInfo for Device {
+    fn get_name(&self) -> &String {
+        if !self.description.is_empty() {
+            &self.description
+        } else if !self.host_name.is_empty() {
+            &self.host_name
+        } else {
+            &self.address
+        }
+    }
 }
 
 fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
@@ -303,17 +337,15 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
 
         for (device_mac, device) in devices {
             // println!("{} = {:?}\n", device_mac, device);
-            DEVICE_HAPPINESS
-                .with_label_values(&[device_mac, {
-                    if !device.description.is_empty() {
-                        &device.description
-                    } else if !device.host_name.is_empty() {
-                        &device.host_name
-                    } else {
-                        &device.address
-                    }
-                }])
-                .set(device.happiness_score as f64)
+            DEVICE_HAPPINESS_GAUGE
+                .with_label_values(&[device_mac, device.get_name()])
+                .set(device.happiness_score);
+            DEVICE_RX_BITRATE_GAUGE
+                .with_label_values(&[device_mac, device.get_name()])
+                .set(device.rx_bitrate);
+            DEVICE_TX_BITRATE_GAUGE
+                .with_label_values(&[device_mac, device.get_name()])
+                .set(device.tx_bitrate);
         }
         // println!("---");
     }
