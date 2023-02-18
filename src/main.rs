@@ -5,8 +5,7 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{
-    labels, opts, register_counter, register_gauge, register_gauge_vec, register_histogram_vec,
-    Counter, Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder,
+    labels, opts, register_counter, register_gauge_vec, Counter, Encoder, GaugeVec, TextEncoder,
 };
 use reqwest::{cookie::Jar, Client, Url};
 use serde::{Deserialize, Serialize};
@@ -21,8 +20,7 @@ use thiserror::Error;
 
 static LOGIN_PASSWORD: Lazy<String> =
     Lazy::new(|| env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD"));
-static BRIDGE_IP: Lazy<String> =
-    Lazy::new(|| env::var("BRIDGE_IP").expect("env BRIDGE_IP"));
+static BRIDGE_IP: Lazy<String> = Lazy::new(|| env::var("BRIDGE_IP").expect("env BRIDGE_IP"));
 
 static HTTP_COUNTER: Lazy<Counter> = Lazy::new(|| {
     register_counter!(opts!(
@@ -30,24 +28,6 @@ static HTTP_COUNTER: Lazy<Counter> = Lazy::new(|| {
         "Number of HTTP requests made.",
         labels! {"handler" => "all",}
     ))
-    .unwrap()
-});
-
-static HTTP_BODY_GAUGE: Lazy<Gauge> = Lazy::new(|| {
-    register_gauge!(opts!(
-        "http_response_size_bytes",
-        "The HTTP response sizes in bytes.",
-        labels! {"handler" => "all",}
-    ))
-    .unwrap()
-});
-
-static HTTP_REQ_HISTOGRAM: Lazy<HistogramVec> = Lazy::new(|| {
-    register_histogram_vec!(
-        "http_request_duration_seconds",
-        "The HTTP request latencies in seconds.",
-        &["handler"]
-    )
     .unwrap()
 });
 
@@ -63,6 +43,15 @@ static DEVICE_HAPPINESS_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
     register_gauge_vec!(
         "device_happiness",
         "The Happiness score of each device.",
+        &["mac", "name"]
+    )
+    .unwrap()
+});
+
+static DEVICE_SIGNAL_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec!(
+        "device_signal",
+        "The Signal score of each device.",
         &["mac", "name"]
     )
     .unwrap()
@@ -358,6 +347,9 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
             DEVICE_HAPPINESS_GAUGE
                 .with_label_values(&[device_mac, device.get_name()])
                 .set(device.happiness_score);
+            DEVICE_SIGNAL_GAUGE
+                .with_label_values(&[device_mac, device.get_name()])
+                .set(device.signal_quality);
             DEVICE_RX_BITRATE_GAUGE
                 .with_label_values(&[device_mac, device.get_name()])
                 .set(device.rx_bitrate);
@@ -406,26 +398,22 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
     let encoder = TextEncoder::new();
 
     HTTP_COUNTER.inc();
-    let timer = HTTP_REQ_HISTOGRAM.with_label_values(&["all"]).start_timer();
 
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
     encoder.encode(&metric_families, &mut buffer)?;
-    HTTP_BODY_GAUGE.set(buffer.len() as f64);
 
     let response = Response::builder()
         .status(200)
         .header(CONTENT_TYPE, encoder.format_type())
         .body(Body::from(buffer))?;
 
-    timer.observe_duration();
-
     Ok(response)
 }
 
 async fn main_loop() -> Result<(), AlienError> {
     let one_sec = tokio::time::Duration::from_secs(1);
-    let thirty_secs = tokio::time::Duration::from_secs(30);
+    let sleep_interval = tokio::time::Duration::from_secs(15);
 
     // Default client
     let mut client = get_client_with_no_cookie()?;
@@ -457,7 +445,7 @@ async fn main_loop() -> Result<(), AlienError> {
 
         if metrics.is_ok() {
             print_metrics(metrics?)?;
-            tokio::time::sleep(thirty_secs).await
+            tokio::time::sleep(sleep_interval).await
         } else {
             println!("DEBUG: Session expired. Logging in again");
             login(&client).await?;

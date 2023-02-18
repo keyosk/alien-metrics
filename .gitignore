@@ -1,3 +1,4 @@
 /target
 cookie.txt
 metrics.json
+prometheus.yml
