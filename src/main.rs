@@ -86,6 +86,24 @@ static DEVICE_TX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
     .unwrap()
 });
 
+static DEVICE_RX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec!(
+        "device_rx_bytes",
+        "The rx bytes of each device.",
+        &["mac", "name"]
+    )
+    .unwrap()
+});
+
+static DEVICE_TX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec!(
+        "device_tx_bytes",
+        "The tx bytes of each device.",
+        &["mac", "name"]
+    )
+    .unwrap()
+});
+
 #[derive(Error, Debug)]
 pub enum AlienError {
     #[error("reqwest error")]
@@ -171,11 +189,11 @@ pub struct Device {
 }
 
 pub trait DeviceInfo {
-    fn get_name(&self) -> &String;
+    fn get_name(&self) -> &str;
 }
 
 impl DeviceInfo for Device {
-    fn get_name(&self) -> &String {
+    fn get_name(&self) -> &str {
         if !self.description.is_empty() {
             &self.description
         } else if !self.host_name.is_empty() {
@@ -346,6 +364,12 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
             DEVICE_TX_BITRATE_GAUGE
                 .with_label_values(&[device_mac, device.get_name()])
                 .set(device.tx_bitrate);
+            DEVICE_RX_BYTES_GAUGE
+                .with_label_values(&[device_mac, device.get_name()])
+                .set(device.rx_bytes);
+            DEVICE_TX_BYTES_GAUGE
+                .with_label_values(&[device_mac, device.get_name()])
+                .set(device.tx_bytes);
         }
         // println!("---");
     }
