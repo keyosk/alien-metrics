@@ -22,7 +22,7 @@ use thiserror::Error;
 static LOGIN_PASSWORD: Lazy<String> =
     Lazy::new(|| env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD"));
 static BRIDGE_IP: Lazy<String> =
-    Lazy::new(|| env::var("BRIDGE_IP").unwrap_or(String::from("192.168.188.1")));
+    Lazy::new(|| env::var("BRIDGE_IP").expect("env BRIDGE_IP"));
 
 static HTTP_COUNTER: Lazy<Counter> = Lazy::new(|| {
     register_counter!(opts!(
@@ -477,8 +477,12 @@ async fn main() -> Result<(), AlienError> {
     }));
 
     tokio::select! {
-        _ = serve_future => {},
-        _ = main_loop() => {},
+        _ = serve_future => {
+            eprintln!("ERROR: Metrics endpoint serve failure")
+        },
+        _ = main_loop() => {
+            eprintln!("ERROR: Login or Parse error, double check credentials and connectivity")
+        },
     }
 
     Ok(())
