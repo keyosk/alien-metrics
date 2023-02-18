@@ -3,6 +3,7 @@ use reqwest::{cookie::Jar, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    collections::HashMap,
     env,
     fs::File,
     io::{BufRead, BufReader, Write},
@@ -132,7 +133,10 @@ async fn get_metrics_token(client: &Client) -> Result<String, AlienError> {
     Ok(String::from(metrics_token))
 }
 
-async fn get_metrics(client: &Client, metrics_token: &str) -> Result<Value, AlienError> {
+async fn get_metrics(
+    client: &Client,
+    metrics_token: &str,
+) -> Result<Vec<HashMap<String, Value>>, AlienError> {
     // Step 4: pull metrics json
 
     let metrics_params = [("do", "full"), ("token", metrics_token)];
@@ -145,7 +149,7 @@ async fn get_metrics(client: &Client, metrics_token: &str) -> Result<Value, Alie
         .form(&metrics_params)
         .send()
         .await?
-        .json::<serde_json::Value>()
+        .json::<Vec<HashMap<String, Value>>>()
         .await?;
 
     Ok(res)
@@ -205,16 +209,11 @@ fn default_resource_u64() -> u64 {
     0
 }
 
-fn print_metrics(res: Value) -> Result<(), AlienError> {
-    let mut res_array = res.as_array().ok_or(AlienError::DevicesParseError)?.iter();
+fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
+    let mut res_array = res.iter();
 
     // remove first item from res_array, it's the router info
-    let router_info = res_array
-        .next()
-        .ok_or(AlienError::DevicesParseError)?
-        .as_object()
-        .ok_or(AlienError::DevicesParseError)?;
-
+    let router_info = res_array.next().ok_or(AlienError::DevicesParseError)?;
     let router_mac = router_info
         .keys()
         .next()
@@ -226,8 +225,6 @@ fn print_metrics(res: Value) -> Result<(), AlienError> {
     let frequencies = res_array
         .next()
         .ok_or(AlienError::DevicesParseError)?
-        .as_object()
-        .ok_or(AlienError::DevicesParseError)?
         .get(router_mac)
         .ok_or(AlienError::DevicesParseError)?
         .as_object()
@@ -237,6 +234,8 @@ fn print_metrics(res: Value) -> Result<(), AlienError> {
         println!("\nfrequency: {:?}\n", frequency);
 
         let devices = devices_by_frequency
+            .as_object()
+            .ok_or(AlienError::DevicesParseError)?
             .get("User network")
             .ok_or(AlienError::DevicesParseError)?
             .as_object()
