@@ -156,6 +156,20 @@ async fn get_metrics(
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouterInfo {
+    pub cost: i64,
+    pub friendly_name: String,
+    pub ip: String,
+    pub level: i64,
+    pub mac: String,
+    pub platform_name: String,
+    pub protocol: i64,
+    pub region_lock: String,
+    pub role: String,
+    pub uptime: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Device {
     #[serde(default = "default_resource_string")]
@@ -213,21 +227,26 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
     let mut res_array = res.iter();
 
     // remove first item from res_array, it's the router info
-    let router_info = res_array.next().ok_or(AlienError::DevicesParseError)?;
-    let router_mac = router_info
-        .keys()
-        .next()
-        .ok_or(AlienError::DevicesParseError)?;
+    let ri: RouterInfo = serde_json::from_value(
+        res_array
+            .next()
+            .ok_or(AlienError::DevicesParseError)?
+            .values()
+            .next()
+            .ok_or(AlienError::DevicesParseError)?
+            .to_owned(),
+    )?;
 
-    println!("router_mac: {:?}", router_mac);
+    println!("router_mac: {:?}", ri.mac);
 
+    // remove the second item from res_array, it's a complex map of devices
     let frequencies: HashMap<String, HashMap<String, HashMap<String, Device>>> =
         serde_json::from_value(
             res_array
                 .next()
-                .unwrap()
-                .get(router_mac)
-                .unwrap()
+                .ok_or(AlienError::DevicesParseError)?
+                .get(&ri.mac)
+                .ok_or(AlienError::DevicesParseError)?
                 .to_owned(),
         )?;
 
