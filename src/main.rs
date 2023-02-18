@@ -319,43 +319,6 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
     HTTP_COUNTER.inc();
     let timer = HTTP_REQ_HISTOGRAM.with_label_values(&["all"]).start_timer();
 
-    // START METRICS PULL
-
-    // Default client
-    let mut client = get_client_with_no_cookie()?;
-
-    // Attempt to create a new client with a saved session cookie
-    let cached_client_result = get_client_with_old_cookie();
-    if cached_client_result.is_ok() {
-        println!("DEBUG: Retrieved cached cookie");
-        client = cached_client_result?;
-    } else {
-        println!("DEBUG: Unable to use cached cookie. Logging in again");
-        login(&client).await?;
-    }
-
-    let metrics_token = {
-        // It's possible the session cookie retrieved is expired
-        // If this result is not ok, let the re-login in the loop occur
-        let metrics_token_result = get_metrics_token(&client).await;
-        if metrics_token_result.is_ok() {
-            metrics_token_result?
-        } else {
-            String::from("")
-        }
-    };
-
-    let metrics = get_metrics(&client, metrics_token.as_str()).await;
-
-    if metrics.is_ok() {
-        if print_metrics(metrics?).is_err() {
-            eprintln!("parse metrics error");
-        }
-    } else {
-        eprintln!("bad cached login... TODO... burn cache and re-login");
-    }
-    // END METRICS PULL
-
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
     encoder.encode(&metric_families, &mut buffer)?;
@@ -371,6 +334,49 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
     Ok(response)
 }
 
+async fn main_loop() -> Result<(), AlienError> {
+    let one_sec = tokio::time::Duration::from_secs(1);
+    let thirty_secs = tokio::time::Duration::from_secs(30);
+
+    // Default client
+    let mut client = get_client_with_no_cookie()?;
+
+    // Attempt to create a new client with a saved session cookie
+    let cached_client_result = get_client_with_old_cookie();
+    if cached_client_result.is_ok() {
+        println!("DEBUG: Retrieved cached cookie");
+        client = cached_client_result?;
+    } else {
+        println!("DEBUG: Unable to use cached cookie. Logging in again");
+        login(&client).await?;
+    }
+
+    let mut metrics_token = {
+        // It's possible the session cookie retrieved is expired
+        // If this result is not ok, let the re-login in the loop occur
+        let metrics_token_result = get_metrics_token(&client).await;
+        if metrics_token_result.is_ok() {
+            metrics_token_result?
+        } else {
+            String::from("")
+        }
+    };
+
+    loop {
+        let metrics = get_metrics(&client, metrics_token.as_str()).await;
+
+        if metrics.is_ok() {
+            print_metrics(metrics?)?;
+            tokio::time::sleep(thirty_secs).await
+        } else {
+            println!("DEBUG: Session expired. Logging in again");
+            login(&client).await?;
+            metrics_token = get_metrics_token(&client).await?;
+            tokio::time::sleep(one_sec).await
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), AlienError> {
     let addr = ([0, 0, 0, 0], 9898).into();
@@ -380,5 +386,10 @@ async fn main() -> Result<(), AlienError> {
         Ok::<_, AlienError>(service_fn(serve_req))
     }));
 
-    Ok(serve_future.await?)
+    tokio::select! {
+        _ = serve_future => {},
+        _ = main_loop() => {},
+    }
+
+    Ok(())
 }
