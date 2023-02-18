@@ -3,10 +3,12 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
-use prometheus::{Counter, Encoder, Gauge, HistogramVec, TextEncoder};
+use prometheus::{Counter, Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder};
 
 use lazy_static::lazy_static;
-use prometheus::{labels, opts, register_counter, register_gauge, register_histogram_vec};
+use prometheus::{
+    labels, opts, register_counter, register_gauge, register_gauge_vec, register_histogram_vec,
+};
 
 use once_cell::sync::Lazy;
 use reqwest::{cookie::Jar, Client, Url};
@@ -42,6 +44,12 @@ lazy_static! {
         "example_http_request_duration_seconds",
         "The HTTP request latencies in seconds.",
         &["handler"]
+    )
+    .unwrap();
+    static ref DEVICE_HAPPINESS: GaugeVec = register_gauge_vec!(
+        "device_happiness",
+        "The Happiness score of each device.",
+        &["mac", "name"]
     )
     .unwrap();
 }
@@ -281,6 +289,17 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
 
         for (device_mac, device) in devices {
             println!("{} = {:?}\n", device_mac, device);
+            DEVICE_HAPPINESS
+                .with_label_values(&[device_mac, {
+                    if !device.description.is_empty() {
+                        &device.description
+                    } else if !device.host_name.is_empty() {
+                        &device.host_name
+                    } else {
+                        &device.address
+                    }
+                }])
+                .set(device.happiness_score as f64)
         }
         println!("---");
     }
