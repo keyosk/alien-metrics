@@ -221,30 +221,25 @@ fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
 
     println!("router_mac: {:?}", router_mac);
 
-    // remove second item from res_array, it's the devices list
-    let frequencies = res_array
-        .next()
-        .ok_or(AlienError::DevicesParseError)?
-        .get(router_mac)
-        .ok_or(AlienError::DevicesParseError)?
-        .as_object()
-        .ok_or(AlienError::DevicesParseError)?;
+    let frequencies: HashMap<String, HashMap<String, HashMap<String, Device>>> =
+        serde_json::from_value(
+            res_array
+                .next()
+                .unwrap()
+                .get(router_mac)
+                .unwrap()
+                .to_owned(),
+        )?;
 
     for (frequency, devices_by_frequency) in frequencies {
         println!("\nfrequency: {:?}\n", frequency);
 
         let devices = devices_by_frequency
-            .as_object()
-            .ok_or(AlienError::DevicesParseError)?
             .get("User network")
-            .ok_or(AlienError::DevicesParseError)?
-            .as_object()
             .ok_or(AlienError::DevicesParseError)?;
 
         for (device_mac, device) in devices {
-            let d: Device = serde_json::from_value(device.to_owned())?;
-            println!("device_mac: {:?}", device_mac);
-            println!("{:?}\n", d);
+            println!("{} = {:?}\n", device_mac, device);
         }
         println!("---");
     }
