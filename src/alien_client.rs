@@ -66,6 +66,7 @@ pub struct AlienClient {
     session_cookie: String,
     metrics_token: String,
     bridge_ip: String,
+    password: String,
 }
 
 impl AlienClient {
@@ -75,6 +76,7 @@ impl AlienClient {
             session_cookie: get_cached_cookie(),
             metrics_token: String::default(),
             bridge_ip: env::var("BRIDGE_IP").expect("env BRIDGE_IP"),
+            password: env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD"),
         };
 
         if client.session_cookie.is_empty() {
@@ -109,10 +111,9 @@ impl AlienClient {
     async fn login(&mut self) -> Result<(), AlienError> {
         // Step 2: Login and get session cookie
 
-        let router_password = env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD");
         let login_params = [
             ("token", &self.get_login_token().await?),
-            ("password", &router_password),
+            ("password", &self.password),
         ];
 
         let login_url = format!("http://{}/login.php", self.bridge_ip);

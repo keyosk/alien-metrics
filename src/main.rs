@@ -1,8 +1,8 @@
 use alien_metrics::{AlienClient, AlienError, Metrics};
 use axum::{extract::State, http::StatusCode, routing::get, Router, Server};
 use prometheus::TextEncoder;
-
 use std::sync::Arc;
+use tokio::signal;
 
 async fn serve_req(State(metrics): State<Arc<Metrics>>) -> (StatusCode, String) {
     let encoder = TextEncoder::new();
@@ -37,6 +37,32 @@ async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     }
 }
 
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    println!("signal received, starting graceful shutdown");
+}
+
 #[tokio::main]
 async fn main() {
     let metrics = Arc::new(Metrics::new().unwrap());
@@ -46,14 +72,20 @@ async fn main() {
     let app = Router::new()
         .route("/metrics", get(serve_req))
         .with_state(metrics.clone());
-    let serve_future = Server::bind(&addr).serve(app.into_make_service());
+    let serve_future = Server::bind(&addr)
+        .serve(app.into_make_service())
+        .with_graceful_shutdown(shutdown_signal());
 
     tokio::select! {
-        _ = serve_future => {
-            eprintln!("ERROR: Metrics endpoint serve failure")
+        res = serve_future => {
+            if res.is_err() {
+                eprintln!("ERROR: Metrics endpoint serve failure: {:?}", res);
+            }
         },
-        _ = main_loop(metrics) => {
-            eprintln!("ERROR: Login or Parse error, double check credentials and connectivity")
+        res = main_loop(metrics) => {
+            if res.is_err() {
+                eprintln!("ERROR: Login or Parse error, double check credentials and connectivity: {:?}", res);
+            }
         },
     }
 }
