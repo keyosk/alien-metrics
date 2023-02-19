@@ -295,16 +295,9 @@ async fn get_metrics(client: &Client, metrics_token: &str) -> Result<AlienMetric
 }
 
 fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
-    for (_router_mac, frequencies) in res
-        .get(1)
-        .ok_or(AlienError::DevicesParseError)?
-        .to_owned()
-        .iter()
-    {
-        for (_frequency, networks) in
-            serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.iter()
-        {
-            for (_network, devices) in networks.iter() {
+    for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
+        for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values() {
+            for devices in networks.values() {
                 for (device_mac, device) in devices {
                     DEVICE_HAPPINESS_GAUGE
                         .with_label_values(&[device_mac, device.get_name()])
