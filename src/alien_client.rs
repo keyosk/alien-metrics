@@ -1,16 +1,9 @@
 use crate::errors::AlienError;
 use crate::metrics::Metrics;
-
 use reqwest::{cookie::Jar, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    env,
-    fs::File,
-    io::{BufRead, BufReader, Write},
-    sync::Arc,
-};
+use std::{collections::HashMap, env, fs::File, io::Write, sync::Arc};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
@@ -80,18 +73,19 @@ pub struct AlienClient {
 
 impl AlienClient {
     pub async fn new() -> Result<Self, AlienError> {
-        let mut client = Self {
-            client: Client::default(),
-            session_cookie: String::default(),
-            metrics_token: String::default(),
-        };
-
-        client.client = {
-            if let Ok(client) = client.get_client_with_old_cookie() {
-                client
+        let (client, session_cookie) =
+            if let Ok((client, session_cookie)) = Self::get_client_with_old_cookie() {
+                (client, session_cookie)
             } else {
-                reqwest::Client::builder().cookie_store(true).build()?
-            }
+                let client = reqwest::Client::builder().cookie_store(true).build()?;
+
+                (client, String::new())
+            };
+
+        let mut client = Self {
+            client,
+            session_cookie,
+            metrics_token: String::default(),
         };
 
         if client.session_cookie.is_empty() {
@@ -108,28 +102,22 @@ impl AlienClient {
         Ok(client)
     }
 
-    fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError> {
+    fn get_client_with_old_cookie() -> Result<(Client, String), AlienError> {
         let path = "cookie.txt";
-
-        let input = File::open(path)?;
-        let buffered = BufReader::new(input);
+        let session_cookie = std::fs::read_to_string(path)?;
 
         let jar = Jar::default();
 
-        if let Some(line) = buffered.lines().next() {
-            self.session_cookie = line?;
-        }
-
         let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
         let url = format!("http://{bridge_ip}");
-        jar.add_cookie_str(&self.session_cookie, &url.parse()?);
+        jar.add_cookie_str(&session_cookie, &url.parse()?);
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
             .cookie_provider(jar.into())
             .build()?;
 
-        Ok(client)
+        Ok((client, session_cookie))
     }
 
     async fn get_login_token(&self) -> Result<String, AlienError> {
