@@ -1,14 +1,8 @@
+use alien_metrics::{AlienError, Metrics};
 use async_trait::async_trait;
-use hyper::{
-    header::CONTENT_TYPE,
-    service::{make_service_fn, service_fn},
-    Body, Request, Response, Server,
-};
-use once_cell::sync::Lazy;
-use prometheus::{
-    labels, opts, register_counter, register_gauge_vec, Counter, Encoder, GaugeVec, TextEncoder,
-};
-use reqwest::{cookie::Jar, Client, Url};
+use axum::{extract::State, http::StatusCode, routing::get, Router, Server};
+use prometheus::TextEncoder;
+use reqwest::{cookie::Jar, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -16,113 +10,8 @@ use std::{
     env,
     fs::File,
     io::{BufRead, BufReader, Write},
+    sync::Arc,
 };
-use thiserror::Error;
-
-static LOGIN_PASSWORD: Lazy<String> =
-    Lazy::new(|| env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD"));
-static BRIDGE_IP: Lazy<String> = Lazy::new(|| env::var("BRIDGE_IP").expect("env BRIDGE_IP"));
-
-static HTTP_COUNTER: Lazy<Counter> = Lazy::new(|| {
-    register_counter!(opts!(
-        "http_requests_total",
-        "Number of HTTP requests made.",
-        labels! {"handler" => "all",}
-    ))
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static SCRAPE_COUNTER: Lazy<Counter> = Lazy::new(|| {
-    register_counter!(opts!(
-        "scrape_requests_total",
-        "Number of times scraped alien metrics endpoint.",
-    ))
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static DEVICE_HAPPINESS_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
-    register_gauge_vec!(
-        "device_happiness",
-        "The Happiness score of each device.",
-        &["mac", "name"]
-    )
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static DEVICE_SIGNAL_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
-    register_gauge_vec!(
-        "device_signal",
-        "The Signal score of each device.",
-        &["mac", "name"]
-    )
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static DEVICE_RX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
-    register_gauge_vec!(
-        "device_rx_bitrate",
-        "The rx bitrate of each device.",
-        &["mac", "name"]
-    )
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static DEVICE_TX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
-    register_gauge_vec!(
-        "device_tx_bitrate",
-        "The tx bitrate of each device.",
-        &["mac", "name"]
-    )
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static DEVICE_RX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
-    register_gauge_vec!(
-        "device_rx_bytes",
-        "The rx bytes of each device.",
-        &["mac", "name"]
-    )
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-static DEVICE_TX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
-    register_gauge_vec!(
-        "device_tx_bytes",
-        "The tx bytes of each device.",
-        &["mac", "name"]
-    )
-    .expect("UNABLE TO REGISTER METRIC")
-});
-
-#[derive(Error, Debug)]
-pub enum AlienError {
-    #[error("reqwest error")]
-    ReqwestError(#[from] reqwest::Error),
-    #[error("token cache r/w error")]
-    TokenCacheError(#[from] std::io::Error),
-    #[error("env BRIDGE_IP error")]
-    BridgeIPError(#[from] url::ParseError),
-    #[error("login error")]
-    CookieError(#[from] reqwest::header::ToStrError),
-    #[error("metrics token missing error")]
-    MetricsTokenMissingError,
-    #[error("invalid password error")]
-    InvalidPasswordError(String),
-    #[error("login token missing error")]
-    LoginTokenMissingError(String),
-    #[error("devices list parse error")]
-    DevicesParseError,
-    #[error("metrics parse error")]
-    MetricsParseError(#[from] serde_json::Error),
-    #[error("server error")]
-    ServerError(#[from] hyper::Error),
-    #[error("server 2 error")]
-    Server2Error(#[from] hyper::http::Error),
-    #[error("server 3 error")]
-    Server3Error(#[from] prometheus::Error),
-    #[error("unknown error")]
-    Unknown,
-}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
@@ -196,27 +85,33 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
     }
 }
 
-fn record_metrics(res: AlienMetricsRoot) -> Result<(), AlienError> {
+fn record_metrics(metrics: &Arc<Metrics>, res: AlienMetricsRoot) -> Result<(), AlienError> {
     for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
         for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values() {
             for devices in networks.values() {
                 for (device_mac, device) in devices {
-                    DEVICE_HAPPINESS_GAUGE
+                    metrics
+                        .device_happiness_guage
                         .with_label_values(&[device_mac, device.get_name()])
                         .set(device.happiness_score);
-                    DEVICE_SIGNAL_GAUGE
+                    metrics
+                        .device_signal_guage
                         .with_label_values(&[device_mac, device.get_name()])
                         .set(device.signal_quality);
-                    DEVICE_RX_BITRATE_GAUGE
+                    metrics
+                        .device_rx_bitrate_guage
                         .with_label_values(&[device_mac, device.get_name()])
                         .set(device.rx_bitrate);
-                    DEVICE_TX_BITRATE_GAUGE
+                    metrics
+                        .device_tx_bitrate_guage
                         .with_label_values(&[device_mac, device.get_name()])
                         .set(device.tx_bitrate);
-                    DEVICE_RX_BYTES_GAUGE
+                    metrics
+                        .device_rx_bytes_guage
                         .with_label_values(&[device_mac, device.get_name()])
                         .set(device.rx_bytes);
-                    DEVICE_TX_BYTES_GAUGE
+                    metrics
+                        .device_tx_bytes_guage
                         .with_label_values(&[device_mac, device.get_name()])
                         .set(device.tx_bytes);
                 }
@@ -226,24 +121,19 @@ fn record_metrics(res: AlienMetricsRoot) -> Result<(), AlienError> {
     Ok(())
 }
 
-async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
+async fn serve_req(State(metrics): State<Arc<Metrics>>) -> (StatusCode, String) {
     let encoder = TextEncoder::new();
 
-    HTTP_COUNTER.inc();
+    metrics.http_counter.inc();
 
     let metric_families = prometheus::gather();
-    let mut buffer = vec![];
-    encoder.encode(&metric_families, &mut buffer)?;
-
-    let response = Response::builder()
-        .status(200)
-        .header(CONTENT_TYPE, encoder.format_type())
-        .body(Body::from(buffer))?;
-
-    Ok(response)
+    match encoder.encode_to_string(&metric_families) {
+        Ok(body) => (StatusCode::OK, body),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+    }
 }
 
-async fn main_loop() -> Result<(), AlienError> {
+async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     let one_sec = tokio::time::Duration::from_secs(1);
     let sleep_interval = tokio::time::Duration::from_secs(15);
 
@@ -254,12 +144,12 @@ async fn main_loop() -> Result<(), AlienError> {
     alien_client.init().await?;
 
     loop {
-        SCRAPE_COUNTER.inc();
+        metrics.scrape_counter.inc();
 
-        let metrics = alien_client.get_metrics().await;
+        let values = alien_client.get_metrics().await;
 
-        if let Ok(metrics) = metrics {
-            record_metrics(metrics)?;
+        if let Ok(values) = values {
+            record_metrics(&metrics, values)?;
             tokio::time::sleep(sleep_interval).await
         } else {
             println!("DEBUG: Session expired. Logging in again");
@@ -302,8 +192,9 @@ impl AlienClientMethods for AlienClient {
             self.session_cookie = line?;
         }
 
-        let url = format!("http://{BRIDGE_IP}", BRIDGE_IP = &BRIDGE_IP.as_str()).parse::<Url>()?;
-        jar.add_cookie_str(&self.session_cookie, &url);
+        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
+        let url = format!("http://{bridge_ip}");
+        jar.add_cookie_str(&self.session_cookie, &url.parse()?);
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
@@ -316,16 +207,9 @@ impl AlienClientMethods for AlienClient {
     async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
         // Step 3: Get the metrics token
 
-        let metrics_token_response = self
-            .client
-            .get(format!(
-                "http://{BRIDGE_IP}/info.php",
-                BRIDGE_IP = BRIDGE_IP.as_str()
-            ))
-            .send()
-            .await?
-            .text()
-            .await?;
+        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
+        let info_url = format!("http://{bridge_ip}/info.php");
+        let metrics_token_response = self.client.get(info_url).send().await?.text().await?;
 
         self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
             .ok_or(AlienError::MetricsTokenMissingError)?
@@ -336,16 +220,9 @@ impl AlienClientMethods for AlienClient {
     async fn capture_login_token(&mut self) -> Result<(), AlienError> {
         // Step 1: Get login token
 
-        let login_token_response = self
-            .client
-            .get(format!(
-                "http://{BRIDGE_IP}/login.php",
-                BRIDGE_IP = &BRIDGE_IP.as_str()
-            ))
-            .send()
-            .await?
-            .text()
-            .await?;
+        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
+        let login_url = format!("http://{bridge_ip}/login.php");
+        let login_token_response = self.client.get(login_url).send().await?.text().await?;
 
         // println!("_BB: {:?}", &login_token_response);
 
@@ -365,14 +242,14 @@ impl AlienClientMethods for AlienClient {
 
         self.capture_login_token().await?;
 
-        let login_params = [("token", &self.login_token), ("password", &LOGIN_PASSWORD)];
+        let router_password = env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD");
+        let login_params = [("token", &self.login_token), ("password", &router_password)];
 
+        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
+        let login_url = format!("http://{bridge_ip}/login.php");
         let res = self
             .client
-            .post(format!(
-                "http://{BRIDGE_IP}/login.php",
-                BRIDGE_IP = &BRIDGE_IP.as_str()
-            ))
+            .post(login_url)
             .form(&login_params)
             .send()
             .await?;
@@ -414,12 +291,11 @@ impl AlienClientMethods for AlienClient {
 
         let metrics_params = [("do", "full"), ("token", &self.metrics_token)];
 
+        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
+        let info_url = format!("http://{bridge_ip}/info-async.php");
         let res = &self
             .client
-            .post(format!(
-                "http://{BRIDGE_IP}/info-async.php",
-                BRIDGE_IP = BRIDGE_IP.as_str()
-            ))
+            .post(info_url)
             .form(&metrics_params)
             .send()
             .await?
@@ -453,18 +329,20 @@ impl AlienClientMethods for AlienClient {
 
 #[tokio::main]
 async fn main() -> Result<(), AlienError> {
-    let addr = ([0, 0, 0, 0], 9898).into();
+    let metrics = Arc::new(Metrics::new()?);
+    let addr = "0.0.0.0:9898".parse().unwrap();
     println!("Listening on http://{}", addr);
 
-    let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
-        Ok::<_, AlienError>(service_fn(serve_req))
-    }));
+    let app = Router::new()
+        .route("/", get(serve_req))
+        .with_state(metrics.clone());
+    let serve_future = Server::bind(&addr).serve(app.into_make_service());
 
     tokio::select! {
         _ = serve_future => {
             eprintln!("ERROR: Metrics endpoint serve failure")
         },
-        _ = main_loop() => {
+        _ = main_loop(metrics) => {
             eprintln!("ERROR: Login or Parse error, double check credentials and connectivity")
         },
     }
