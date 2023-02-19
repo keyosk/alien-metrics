@@ -334,7 +334,7 @@ async fn main() -> Result<(), AlienError> {
     println!("Listening on http://{}", addr);
 
     let app = Router::new()
-        .route("/", get(serve_req))
+        .route("/metrics", get(serve_req))
         .with_state(metrics.clone());
     let serve_future = Server::bind(&addr).serve(app.into_make_service());
 
