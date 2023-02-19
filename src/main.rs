@@ -10,6 +10,7 @@ use tokio::{
     },
     time::{sleep, Duration},
 };
+use tracing::{error, info};
 
 async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     let one_sec = Duration::from_secs(1);
@@ -65,14 +66,15 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
 
-    println!("\nDEBUG: signal received, starting graceful shutdown");
+    info!("Signal received, starting graceful shutdown");
 }
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     let metrics = Arc::new(Metrics::new().unwrap());
     let addr = "0.0.0.0:9898".parse().unwrap();
-    println!("Listening on http://{}/metrics", addr);
+    info!("Listening on http://{}/metrics", addr);
 
     let app = Router::new()
         .route("/metrics", get(serve_req))
@@ -84,12 +86,12 @@ async fn main() {
     select! {
         res = serve_future => {
             if res.is_err() {
-                eprintln!("ERROR: Metrics endpoint serve failure: {:?}", res);
+                error!("Metrics endpoint serve failure: {:?}", res);
             }
         },
         res = main_loop(metrics) => {
             if res.is_err() {
-                eprintln!("ERROR: Login or Parse error, double check credentials and connectivity: {:?}", res);
+                error!("Login or Parse error, double check credentials and connectivity: {:?}", res);
             }
         },
     }

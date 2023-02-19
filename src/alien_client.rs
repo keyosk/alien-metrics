@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, env, fs::File, io::Write, sync::Arc};
+use tracing::info;
 
 type AlienInfoRoot = Vec<HashMap<String, Value>>;
 type AlienInfo = HashMap<String, HashMap<String, HashMap<String, Device>>>;
@@ -80,7 +81,7 @@ impl AlienClient {
         };
 
         if client.session_cookie.is_empty() {
-            println!("DEBUG: Empty session token.... logging in...");
+            info!("Empty session token.... logging in...");
             client.login().await?;
         }
 
@@ -173,7 +174,7 @@ impl AlienClient {
     }
 
     pub async fn re_login(&mut self) -> Result<(), AlienError> {
-        println!("DEBUG: Session expired. Logging in again");
+        info!("Session expired. Logging in again");
         self.login().await?;
         self.capture_metrics_token().await?;
         Ok(())

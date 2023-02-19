@@ -5,7 +5,7 @@
 ```bash
 export ROUTER_PASSWORD='SEKRIT'
 export BRIDGE_IP='192.168.188.1'
-cargo run
+RUST_LOG=info cargo run
 ```
 
 ## Testing
