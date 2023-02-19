@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, env, fs::File, io::Write, sync::Arc};
 
+type AlienInfoRoot = Vec<HashMap<String, Value>>;
+type AlienInfo = HashMap<String, HashMap<String, HashMap<String, Device>>>;
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 struct Device {
@@ -45,11 +48,7 @@ struct Device {
     tx_mhz: f64,
 }
 
-trait DeviceInfo {
-    fn get_name(&self) -> &str;
-}
-
-impl DeviceInfo for Device {
+impl Device {
     fn get_name(&self) -> &str {
         if !self.description.is_empty() {
             &self.description
@@ -60,9 +59,6 @@ impl DeviceInfo for Device {
         }
     }
 }
-
-type AlienMetricsRoot = Vec<HashMap<String, Value>>;
-type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
 #[derive(Debug, Clone)]
 pub struct AlienClient {
@@ -136,10 +132,7 @@ impl AlienClient {
             .to_str()?
             .to_string();
 
-        let path = "cookie.txt";
-        let mut output = File::create(path)?;
-
-        write!(output, "{}", &self.session_cookie)?;
+        set_cached_cookie(&self.session_cookie)?;
 
         let res_text = res.text().await?;
 
@@ -185,8 +178,8 @@ impl AlienClient {
         Ok(())
     }
 
-    pub async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError> {
-        // Step 4: pull metrics json
+    pub async fn get_info(&self) -> Result<AlienInfoRoot, AlienError> {
+        // Step 4: pull info json
 
         let metrics_params = [("do", "full"), ("token", &self.metrics_token)];
 
@@ -198,7 +191,7 @@ impl AlienClient {
             .header("cookie", &self.session_cookie)
             .send()
             .await?
-            .json::<AlienMetricsRoot>()
+            .json::<AlienInfoRoot>()
             .await?;
 
         Ok(res.to_vec())
@@ -207,11 +200,10 @@ impl AlienClient {
     pub fn record_metrics(
         &self,
         metrics: &Arc<Metrics>,
-        res: AlienMetricsRoot,
+        res: AlienInfoRoot,
     ) -> Result<(), AlienError> {
         for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
-            for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values()
-            {
+            for networks in serde_json::from_value::<AlienInfo>(frequencies.to_owned())?.values() {
                 for devices in networks.values() {
                     for (device_mac, device) in devices {
                         metrics
@@ -265,4 +257,8 @@ fn get_cached_cookie() -> String {
     } else {
         String::new()
     }
+}
+
+fn set_cached_cookie(session_cookie: &str) -> Result<(), std::io::Error> {
+    write!(File::create("cookie.txt")?, "{}", session_cookie)
 }
