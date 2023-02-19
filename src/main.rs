@@ -3,14 +3,10 @@ use axum::{extract::State, http::StatusCode, routing::get, Router, Server};
 use prometheus::TextEncoder;
 use std::sync::Arc;
 use tokio::{
-    select,
-    signal::ctrl_c,
+    select, signal,
     time::{sleep, Duration},
 };
 use tracing::{error, info};
-
-#[cfg(unix)]
-use tokio::signal::unix::{signal, SignalKind};
 
 async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     let one_sec = Duration::from_secs(1);
@@ -53,12 +49,14 @@ async fn serve_req(State(metrics): State<Arc<Metrics>>) -> (StatusCode, String) 
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal(SignalKind::terminate())
+        signal::unix::signal(signal::unix::SignalKind::terminate())
             .expect("failed to install signal handler")
             .recv()
             .await;
