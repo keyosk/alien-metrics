@@ -94,8 +94,10 @@ impl AlienClient {
             }
         };
 
-        println!("logging in...");
-        client.login().await?;
+        if client.session_cookie.is_empty() {
+            println!("Empty session token.... logging in...");
+            client.login().await?;
+        }
 
         if client.capture_metrics_token().await.is_err() {
             // It's possible the cached session cookie is no longer valid
@@ -148,7 +150,7 @@ impl AlienClient {
         )
     }
 
-    pub async fn login(&mut self) -> Result<(), AlienError> {
+    async fn login(&mut self) -> Result<(), AlienError> {
         // Step 2: Login and get session cookie
 
         self.client = reqwest::Client::builder().cookie_store(true).build()?;
