@@ -183,97 +183,9 @@ impl DeviceInfo for Device {
 type AlienMetricsRoot = Vec<HashMap<String, Value>>;
 type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
-fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
-    match input.find(open) {
-        Some(index) => {
-            let start = index + open.len();
-            match input[start..].find(close) {
-                Some(index) if index > 0 => Some(&input[start..start + index]),
-                _ => None,
-            }
-        }
-        None => None,
-    }
-}
-
-fn record_metrics(res: AlienMetricsRoot) -> Result<(), AlienError> {
-    for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
-        for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values() {
-            for devices in networks.values() {
-                for (device_mac, device) in devices {
-                    DEVICE_HAPPINESS_GAUGE
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.happiness_score);
-                    DEVICE_SIGNAL_GAUGE
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.signal_quality);
-                    DEVICE_RX_BITRATE_GAUGE
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.rx_bitrate);
-                    DEVICE_TX_BITRATE_GAUGE
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.tx_bitrate);
-                    DEVICE_RX_BYTES_GAUGE
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.rx_bytes);
-                    DEVICE_TX_BYTES_GAUGE
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.tx_bytes);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
-    let encoder = TextEncoder::new();
-
-    HTTP_COUNTER.inc();
-
-    let metric_families = prometheus::gather();
-    let mut buffer = vec![];
-    encoder.encode(&metric_families, &mut buffer)?;
-
-    let response = Response::builder()
-        .status(200)
-        .header(CONTENT_TYPE, encoder.format_type())
-        .body(Body::from(buffer))?;
-
-    Ok(response)
-}
-
-async fn main_loop() -> Result<(), AlienError> {
-    let one_sec = tokio::time::Duration::from_secs(1);
-    let sleep_interval = tokio::time::Duration::from_secs(15);
-
-    let mut alien_client = AlienClient {
-        ..Default::default()
-    };
-
-    alien_client.init().await?;
-
-    loop {
-        SCRAPE_COUNTER.inc();
-
-        let metrics = alien_client.get_metrics().await;
-
-        if let Ok(metrics) = metrics {
-            record_metrics(metrics)?;
-            tokio::time::sleep(sleep_interval).await
-        } else {
-            println!("DEBUG: Session expired. Logging in again");
-            alien_client.login().await?;
-            alien_client.capture_metrics_token().await?;
-            tokio::time::sleep(one_sec).await
-        }
-    }
-}
-
 #[derive(Default, Debug, Clone)]
 pub struct AlienClient {
     client: Client,
-    login_token: String,
     session_cookie: String,
     metrics_token: String,
 }
@@ -281,11 +193,12 @@ pub struct AlienClient {
 #[async_trait]
 pub trait AlienClientMethods {
     async fn init(&mut self) -> Result<(), AlienError>;
-    async fn capture_login_token(&mut self) -> Result<(), AlienError>;
+    async fn get_login_token(&self) -> Result<String, AlienError>;
     async fn capture_metrics_token(&mut self) -> Result<(), AlienError>;
     async fn login(&mut self) -> Result<(), AlienError>;
     async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError>;
     fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError>;
+    fn record_metrics(&self, res: AlienMetricsRoot) -> Result<(), AlienError>;
 }
 
 #[async_trait]
@@ -313,27 +226,7 @@ impl AlienClientMethods for AlienClient {
         Ok(client)
     }
 
-    async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
-        // Step 3: Get the metrics token
-
-        let metrics_token_response = self
-            .client
-            .get(format!(
-                "http://{BRIDGE_IP}/info.php",
-                BRIDGE_IP = BRIDGE_IP.as_str()
-            ))
-            .send()
-            .await?
-            .text()
-            .await?;
-
-        self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
-            .ok_or(AlienError::MetricsTokenMissingError)?
-            .to_string();
-        Ok(())
-    }
-
-    async fn capture_login_token(&mut self) -> Result<(), AlienError> {
+    async fn get_login_token(&self) -> Result<String, AlienError> {
         // Step 1: Get login token
 
         let login_token_response = self
@@ -349,13 +242,13 @@ impl AlienClientMethods for AlienClient {
 
         // println!("_BB: {:?}", &login_token_response);
 
-        self.login_token = find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
-            .ok_or(AlienError::LoginTokenMissingError(
-                login_token_response.clone(),
-            ))?
-            .to_string();
-
-        Ok(())
+        Ok(
+            find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
+                .ok_or(AlienError::LoginTokenMissingError(
+                    login_token_response.clone(),
+                ))?
+                .to_string(),
+        )
     }
 
     async fn login(&mut self) -> Result<(), AlienError> {
@@ -363,9 +256,10 @@ impl AlienClientMethods for AlienClient {
 
         self.client = reqwest::Client::builder().cookie_store(true).build()?;
 
-        self.capture_login_token().await?;
-
-        let login_params = [("token", &self.login_token), ("password", &LOGIN_PASSWORD)];
+        let login_params = [
+            ("token", &self.get_login_token().await?),
+            ("password", &LOGIN_PASSWORD),
+        ];
 
         let res = self
             .client
@@ -409,6 +303,26 @@ impl AlienClientMethods for AlienClient {
         }
     }
 
+    async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
+        // Step 3: Get the metrics token
+
+        let metrics_token_response = self
+            .client
+            .get(format!(
+                "http://{BRIDGE_IP}/info.php",
+                BRIDGE_IP = BRIDGE_IP.as_str()
+            ))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
+            .ok_or(AlienError::MetricsTokenMissingError)?
+            .to_string();
+        Ok(())
+    }
+
     async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError> {
         // Step 4: pull metrics json
 
@@ -427,6 +341,37 @@ impl AlienClientMethods for AlienClient {
             .await?;
 
         Ok(res.to_vec())
+    }
+
+    fn record_metrics(&self, res: AlienMetricsRoot) -> Result<(), AlienError> {
+        for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
+            for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values()
+            {
+                for devices in networks.values() {
+                    for (device_mac, device) in devices {
+                        DEVICE_HAPPINESS_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.happiness_score);
+                        DEVICE_SIGNAL_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.signal_quality);
+                        DEVICE_RX_BITRATE_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.rx_bitrate);
+                        DEVICE_TX_BITRATE_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.tx_bitrate);
+                        DEVICE_RX_BYTES_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.rx_bytes);
+                        DEVICE_TX_BYTES_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.tx_bytes);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn init(&mut self) -> Result<(), AlienError> {
@@ -448,6 +393,63 @@ impl AlienClientMethods for AlienClient {
             self.capture_metrics_token().await?;
         }
         Ok(())
+    }
+}
+
+fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
+    match input.find(open) {
+        Some(index) => {
+            let start = index + open.len();
+            match input[start..].find(close) {
+                Some(index) if index > 0 => Some(&input[start..start + index]),
+                _ => None,
+            }
+        }
+        None => None,
+    }
+}
+
+async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
+    let encoder = TextEncoder::new();
+
+    HTTP_COUNTER.inc();
+
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    encoder.encode(&metric_families, &mut buffer)?;
+
+    let response = Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))?;
+
+    Ok(response)
+}
+
+async fn main_loop() -> Result<(), AlienError> {
+    let one_sec = tokio::time::Duration::from_secs(1);
+    let sleep_interval = tokio::time::Duration::from_secs(15);
+
+    let mut alien_client = AlienClient {
+        ..Default::default()
+    };
+
+    alien_client.init().await?;
+
+    loop {
+        SCRAPE_COUNTER.inc();
+
+        let metrics = alien_client.get_metrics().await;
+
+        if let Ok(metrics) = metrics {
+            alien_client.record_metrics(metrics)?;
+            tokio::time::sleep(sleep_interval).await
+        } else {
+            println!("DEBUG: Session expired. Logging in again");
+            alien_client.login().await?;
+            alien_client.capture_metrics_token().await?;
+            tokio::time::sleep(one_sec).await
+        }
     }
 }
 
