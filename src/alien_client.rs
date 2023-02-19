@@ -100,8 +100,7 @@ impl AlienClient {
         if client.capture_metrics_token().await.is_err() {
             // It's possible the cached session cookie is no longer valid
             // If the next login and capture fails, bail out with error
-            client.login().await?;
-            client.capture_metrics_token().await?;
+            client.re_login().await?;
         }
 
         Ok(client)
@@ -201,7 +200,7 @@ impl AlienClient {
         }
     }
 
-    pub async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
+    async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
         // Step 3: Get the metrics token
 
         let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
@@ -211,6 +210,12 @@ impl AlienClient {
         self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
             .ok_or(AlienError::MetricsTokenMissingError)?
             .to_string();
+        Ok(())
+    }
+
+    pub async fn re_login(&mut self) -> Result<(), AlienError> {
+        self.login().await?;
+        self.capture_metrics_token().await?;
         Ok(())
     }
 

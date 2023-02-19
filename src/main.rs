@@ -32,8 +32,7 @@ async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
             tokio::time::sleep(sleep_interval).await
         } else {
             println!("DEBUG: Session expired. Logging in again");
-            alien_client.login().await?;
-            alien_client.capture_metrics_token().await?;
+            alien_client.re_login().await?;
             tokio::time::sleep(one_sec).await
         }
     }
