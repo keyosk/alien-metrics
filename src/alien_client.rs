@@ -74,17 +74,9 @@ pub struct AlienClient {
 
 impl AlienClient {
     pub async fn new() -> Result<Self, AlienError> {
-        let client = get_reqwest_client()?;
-
-        let session_cookie = if let Ok(session_cookie) = get_cached_cookie() {
-            session_cookie
-        } else {
-            String::new()
-        };
-
         let mut client = Self {
-            client,
-            session_cookie,
+            client: Client::default(),
+            session_cookie: get_cached_cookie(),
             metrics_token: String::default(),
             bridge_ip: env::var("BRIDGE_IP").expect("env BRIDGE_IP"),
         };
@@ -268,11 +260,10 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
     }
 }
 
-fn get_reqwest_client() -> Result<Client, reqwest::Error> {
-    reqwest::Client::builder().build()
-}
-
-fn get_cached_cookie() -> Result<String, std::io::Error> {
-    let path = "cookie.txt";
-    std::fs::read_to_string(path)
+fn get_cached_cookie() -> String {
+    if let Ok(session_cookie) = std::fs::read_to_string("cookie.txt") {
+        session_cookie
+    } else {
+        String::new()
+    }
 }
