@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use hyper::{
     header::CONTENT_TYPE,
     service::{make_service_fn, service_fn},
@@ -195,105 +196,6 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
     }
 }
 
-async fn login(client: &Client) -> Result<(), AlienError> {
-    // Step 1: Get login token
-
-    let login_token_response = client
-        .get(format!(
-            "http://{BRIDGE_IP}/login.php",
-            BRIDGE_IP = &BRIDGE_IP.as_str()
-        ))
-        .send()
-        .await?
-        .text()
-        .await?;
-
-    let login_token = find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
-        .ok_or(AlienError::LoginTokenMissingError(
-            login_token_response.clone(),
-        ))?;
-
-    // Step 2: Login and get session cookie
-
-    let login_params = [("token", login_token), ("password", &LOGIN_PASSWORD)];
-
-    let res = client
-        .post(format!(
-            "http://{BRIDGE_IP}/login.php",
-            BRIDGE_IP = &BRIDGE_IP.as_str()
-        ))
-        .form(&login_params)
-        .send()
-        .await?;
-
-    let login_cookie = res
-        .headers()
-        .get("set-cookie")
-        .ok_or(AlienError::InvalidPasswordError(String::from(
-            "No cookie returned",
-        )))?;
-
-    let path = "cookie.txt";
-    let mut output = File::create(path)?;
-
-    write!(output, "{}", login_cookie.to_str()?)?;
-
-    let res_text = res.text().await?;
-
-    if res_text.contains("URL='info.php'")
-        || res_text.contains("URL='index.php'")
-        || res_text.contains("URL='settings.php'")
-    {
-        Ok(())
-    } else if res_text.contains("URL='login.php'") {
-        Err(AlienError::InvalidPasswordError(String::from(
-            "Invalid password",
-        )))
-    } else {
-        Err(AlienError::InvalidPasswordError(String::from(
-            "Unexpected response",
-        )))
-    }
-}
-
-async fn get_metrics_token(client: &Client) -> Result<String, AlienError> {
-    // Step 3: Get the metrics token
-
-    let metrics_token_response = client
-        .get(format!(
-            "http://{BRIDGE_IP}/info.php",
-            BRIDGE_IP = BRIDGE_IP.as_str()
-        ))
-        .send()
-        .await?
-        .text()
-        .await?;
-
-    let metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
-        .ok_or(AlienError::MetricsTokenMissingError)?;
-
-    Ok(String::from(metrics_token))
-}
-
-async fn get_metrics(client: &Client, metrics_token: &str) -> Result<AlienMetricsRoot, AlienError> {
-    // Step 4: pull metrics json
-
-    let metrics_params = [("do", "full"), ("token", metrics_token)];
-
-    let res = client
-        .post(format!(
-            "http://{BRIDGE_IP}/info-async.php",
-            BRIDGE_IP = BRIDGE_IP.as_str()
-        ))
-        .form(&metrics_params)
-        .send()
-        .await?
-        .json::<AlienMetricsRoot>()
-        .await?;
-
-    Ok(res)
-}
-
 fn record_metrics(res: AlienMetricsRoot) -> Result<(), AlienError> {
     for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
         for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values() {
@@ -324,32 +226,6 @@ fn record_metrics(res: AlienMetricsRoot) -> Result<(), AlienError> {
     Ok(())
 }
 
-fn get_client_with_old_cookie() -> Result<Client, AlienError> {
-    let path = "cookie.txt";
-
-    let input = File::open(path)?;
-    let buffered = BufReader::new(input);
-
-    let jar = Jar::default();
-
-    for line in buffered.lines() {
-        let url = format!("http://{BRIDGE_IP}", BRIDGE_IP = &BRIDGE_IP.as_str()).parse::<Url>()?;
-        jar.add_cookie_str(&line?, &url);
-    }
-
-    let client = reqwest::Client::builder()
-        .cookie_store(true)
-        .cookie_provider(jar.into())
-        .build()?;
-
-    Ok(client)
-}
-
-fn get_client_with_no_cookie() -> Result<Client, AlienError> {
-    // Enable the cookie_store for moving along the webui-session cookie
-    Ok(reqwest::Client::builder().cookie_store(true).build()?)
-}
-
 async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, AlienError> {
     let encoder = TextEncoder::new();
 
@@ -371,43 +247,207 @@ async fn main_loop() -> Result<(), AlienError> {
     let one_sec = tokio::time::Duration::from_secs(1);
     let sleep_interval = tokio::time::Duration::from_secs(15);
 
-    // Default client
-    let mut client = get_client_with_no_cookie()?;
-
-    // Attempt to create a new client with a saved session cookie
-    let cached_client_result = get_client_with_old_cookie();
-    if cached_client_result.is_ok() {
-        println!("DEBUG: Retrieved cached cookie");
-        client = cached_client_result?;
-    } else {
-        println!("DEBUG: Unable to use cached cookie. Logging in again");
-        login(&client).await?;
-    }
-
-    let mut metrics_token = {
-        // It's possible the session cookie retrieved is expired
-        // If this result is not ok, let the re-login in the loop occur
-        let metrics_token_result = get_metrics_token(&client).await;
-        if metrics_token_result.is_ok() {
-            metrics_token_result?
-        } else {
-            String::from("")
-        }
+    let mut alien_client = AlienClient {
+        ..Default::default()
     };
+
+    alien_client.init().await?;
 
     loop {
         SCRAPE_COUNTER.inc();
-        let metrics = get_metrics(&client, metrics_token.as_str()).await;
+
+        let metrics = alien_client.get_metrics().await;
 
         if let Ok(metrics) = metrics {
             record_metrics(metrics)?;
             tokio::time::sleep(sleep_interval).await
         } else {
             println!("DEBUG: Session expired. Logging in again");
-            login(&client).await?;
-            metrics_token = get_metrics_token(&client).await?;
+            alien_client.login().await?;
+            alien_client.capture_metrics_token().await?;
             tokio::time::sleep(one_sec).await
         }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct AlienClient {
+    client: Client,
+    login_token: String,
+    session_cookie: String,
+    metrics_token: String,
+}
+
+#[async_trait]
+pub trait AlienClientMethods {
+    async fn init(&mut self) -> Result<(), AlienError>;
+    async fn capture_login_token(&mut self) -> Result<(), AlienError>;
+    async fn capture_metrics_token(&mut self) -> Result<(), AlienError>;
+    async fn login(&mut self) -> Result<(), AlienError>;
+    async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError>;
+    fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError>;
+}
+
+#[async_trait]
+impl AlienClientMethods for AlienClient {
+    fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError> {
+        let path = "cookie.txt";
+
+        let input = File::open(path)?;
+        let buffered = BufReader::new(input);
+
+        let jar = Jar::default();
+
+        if let Some(line) = buffered.lines().next() {
+            self.session_cookie = line?;
+        }
+
+        let url = format!("http://{BRIDGE_IP}", BRIDGE_IP = &BRIDGE_IP.as_str()).parse::<Url>()?;
+        jar.add_cookie_str(&self.session_cookie, &url);
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .cookie_provider(jar.into())
+            .build()?;
+
+        Ok(client)
+    }
+
+    async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
+        // Step 3: Get the metrics token
+
+        let metrics_token_response = self
+            .client
+            .get(format!(
+                "http://{BRIDGE_IP}/info.php",
+                BRIDGE_IP = BRIDGE_IP.as_str()
+            ))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
+            .ok_or(AlienError::MetricsTokenMissingError)?
+            .to_string();
+        Ok(())
+    }
+
+    async fn capture_login_token(&mut self) -> Result<(), AlienError> {
+        // Step 1: Get login token
+
+        let login_token_response = self
+            .client
+            .get(format!(
+                "http://{BRIDGE_IP}/login.php",
+                BRIDGE_IP = &BRIDGE_IP.as_str()
+            ))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        // println!("_BB: {:?}", &login_token_response);
+
+        self.login_token = find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
+            .ok_or(AlienError::LoginTokenMissingError(
+                login_token_response.clone(),
+            ))?
+            .to_string();
+
+        Ok(())
+    }
+
+    async fn login(&mut self) -> Result<(), AlienError> {
+        // Step 2: Login and get session cookie
+
+        self.client = reqwest::Client::builder().cookie_store(true).build()?;
+
+        self.capture_login_token().await?;
+
+        let login_params = [("token", &self.login_token), ("password", &LOGIN_PASSWORD)];
+
+        let res = self
+            .client
+            .post(format!(
+                "http://{BRIDGE_IP}/login.php",
+                BRIDGE_IP = &BRIDGE_IP.as_str()
+            ))
+            .form(&login_params)
+            .send()
+            .await?;
+
+        self.session_cookie = res
+            .headers()
+            .get("set-cookie")
+            .ok_or(AlienError::InvalidPasswordError(String::from(
+                "No cookie returned",
+            )))?
+            .to_str()?
+            .to_string();
+
+        let path = "cookie.txt";
+        let mut output = File::create(path)?;
+
+        write!(output, "{}", &self.session_cookie)?;
+
+        let res_text = res.text().await?;
+
+        if res_text.contains("URL='info.php'")
+            || res_text.contains("URL='index.php'")
+            || res_text.contains("URL='settings.php'")
+        {
+            Ok(())
+        } else if res_text.contains("URL='login.php'") {
+            Err(AlienError::InvalidPasswordError(String::from(
+                "Invalid password",
+            )))
+        } else {
+            Err(AlienError::InvalidPasswordError(String::from(
+                "Unexpected response",
+            )))
+        }
+    }
+
+    async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError> {
+        // Step 4: pull metrics json
+
+        let metrics_params = [("do", "full"), ("token", &self.metrics_token)];
+
+        let res = &self
+            .client
+            .post(format!(
+                "http://{BRIDGE_IP}/info-async.php",
+                BRIDGE_IP = BRIDGE_IP.as_str()
+            ))
+            .form(&metrics_params)
+            .send()
+            .await?
+            .json::<AlienMetricsRoot>()
+            .await?;
+
+        Ok(res.to_vec())
+    }
+
+    async fn init(&mut self) -> Result<(), AlienError> {
+        self.client = {
+            if let Ok(client) = self.get_client_with_old_cookie() {
+                client
+            } else {
+                reqwest::Client::builder().cookie_store(true).build()?
+            }
+        };
+        if self.session_cookie.is_empty() {
+            println!("Empty session token.... logging in...");
+            self.login().await?;
+        }
+        if self.capture_metrics_token().await.is_err() {
+            // It's possible the cached session cookie is no longer valid
+            // If the next login and capture fails, bail out with error
+            self.login().await?;
+            self.capture_metrics_token().await?;
+        }
+        Ok(())
     }
 }
 
