@@ -294,7 +294,7 @@ async fn get_metrics(client: &Client, metrics_token: &str) -> Result<AlienMetric
     Ok(res)
 }
 
-fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
+fn record_metrics(res: AlienMetricsRoot) -> Result<(), AlienError> {
     for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
         for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values() {
             for devices in networks.values() {
@@ -399,8 +399,8 @@ async fn main_loop() -> Result<(), AlienError> {
         SCRAPE_COUNTER.inc();
         let metrics = get_metrics(&client, metrics_token.as_str()).await;
 
-        if metrics.is_ok() {
-            print_metrics(metrics?)?;
+        if let Ok(metrics) = metrics {
+            record_metrics(metrics)?;
             tokio::time::sleep(sleep_interval).await
         } else {
             println!("DEBUG: Session expired. Logging in again");
