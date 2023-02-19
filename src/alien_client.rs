@@ -7,45 +7,45 @@ use std::{collections::HashMap, env, fs::File, io::Write, sync::Arc};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
-pub struct Device {
-    pub address: String,
-    pub description: String,
-    pub happiness_score: f64,
-    pub host_name: String,
-    pub inactive: f64,
-    pub lease_validity: f64,
-    pub max_bandwidth: f64,
-    pub max_spatial_streams: f64,
-    pub mode: String,
-    pub radio_mode: String,
-    pub rx_bitrate: f64,
-    pub rx_bytes: f64,
+struct Device {
+    address: String,
+    description: String,
+    happiness_score: f64,
+    host_name: String,
+    inactive: f64,
+    lease_validity: f64,
+    max_bandwidth: f64,
+    max_spatial_streams: f64,
+    mode: String,
+    radio_mode: String,
+    rx_bitrate: f64,
+    rx_bytes: f64,
     #[serde(rename = "RxBytes_5sec")]
-    pub rx_bytes_5sec: f64,
+    rx_bytes_5sec: f64,
     #[serde(rename = "RxBytes_15sec")]
-    pub rx_bytes_15sec: f64,
+    rx_bytes_15sec: f64,
     #[serde(rename = "RxBytes_30sec")]
-    pub rx_bytes_30sec: f64,
+    rx_bytes_30sec: f64,
     #[serde(rename = "RxBytes_60sec")]
-    pub rx_bytes_60sec: f64,
-    pub rx_mcs: f64,
-    pub rx_mhz: f64,
-    pub signal_quality: f64,
-    pub tx_bitrate: f64,
-    pub tx_bytes: f64,
+    rx_bytes_60sec: f64,
+    rx_mcs: f64,
+    rx_mhz: f64,
+    signal_quality: f64,
+    tx_bitrate: f64,
+    tx_bytes: f64,
     #[serde(rename = "TxBytes_5sec")]
-    pub tx_bytes_5sec: f64,
+    tx_bytes_5sec: f64,
     #[serde(rename = "TxBytes_15sec")]
-    pub tx_bytes_15sec: f64,
+    tx_bytes_15sec: f64,
     #[serde(rename = "TxBytes_30sec")]
-    pub tx_bytes_30sec: f64,
+    tx_bytes_30sec: f64,
     #[serde(rename = "TxBytes_60sec")]
-    pub tx_bytes_60sec: f64,
-    pub tx_mcs: f64,
-    pub tx_mhz: f64,
+    tx_bytes_60sec: f64,
+    tx_mcs: f64,
+    tx_mhz: f64,
 }
 
-pub trait DeviceInfo {
+trait DeviceInfo {
     fn get_name(&self) -> &str;
 }
 
@@ -66,10 +66,10 @@ type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
 #[derive(Debug, Clone)]
 pub struct AlienClient {
-    pub client: Client,
-    pub session_cookie: String,
-    pub metrics_token: String,
-    pub bridge_ip: String,
+    client: Client,
+    session_cookie: String,
+    metrics_token: String,
+    bridge_ip: String,
 }
 
 impl AlienClient {
@@ -82,7 +82,7 @@ impl AlienClient {
         };
 
         if client.session_cookie.is_empty() {
-            println!("Empty session token.... logging in...");
+            println!("DEBUG: Empty session token.... logging in...");
             client.login().await?;
         }
 
@@ -100,8 +100,6 @@ impl AlienClient {
 
         let login_url = format!("http://{}/login.php", self.bridge_ip);
         let login_token_response = self.client.get(login_url).send().await?.text().await?;
-
-        // println!("_BB: {:?}", &login_token_response);
 
         Ok(
             find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
@@ -181,6 +179,7 @@ impl AlienClient {
     }
 
     pub async fn re_login(&mut self) -> Result<(), AlienError> {
+        println!("DEBUG: Session expired. Logging in again");
         self.login().await?;
         self.capture_metrics_token().await?;
         Ok(())
