@@ -1,5 +1,4 @@
 use alien_metrics::{AlienError, Metrics};
-use async_trait::async_trait;
 use axum::{extract::State, http::StatusCode, routing::get, Router, Server};
 use prometheus::TextEncoder;
 use reqwest::{cookie::Jar, Client};
@@ -72,114 +71,14 @@ impl DeviceInfo for Device {
 type AlienMetricsRoot = Vec<HashMap<String, Value>>;
 type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
-fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
-    match input.find(open) {
-        Some(index) => {
-            let start = index + open.len();
-            match input[start..].find(close) {
-                Some(index) if index > 0 => Some(&input[start..start + index]),
-                _ => None,
-            }
-        }
-        None => None,
-    }
-}
-
-fn record_metrics(metrics: &Arc<Metrics>, res: AlienMetricsRoot) -> Result<(), AlienError> {
-    for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
-        for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values() {
-            for devices in networks.values() {
-                for (device_mac, device) in devices {
-                    metrics
-                        .device_happiness_guage
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.happiness_score);
-                    metrics
-                        .device_signal_guage
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.signal_quality);
-                    metrics
-                        .device_rx_bitrate_guage
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.rx_bitrate);
-                    metrics
-                        .device_tx_bitrate_guage
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.tx_bitrate);
-                    metrics
-                        .device_rx_bytes_guage
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.rx_bytes);
-                    metrics
-                        .device_tx_bytes_guage
-                        .with_label_values(&[device_mac, device.get_name()])
-                        .set(device.tx_bytes);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-async fn serve_req(State(metrics): State<Arc<Metrics>>) -> (StatusCode, String) {
-    let encoder = TextEncoder::new();
-
-    metrics.http_counter.inc();
-
-    let metric_families = prometheus::gather();
-    match encoder.encode_to_string(&metric_families) {
-        Ok(body) => (StatusCode::OK, body),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
-}
-
-async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
-    let one_sec = tokio::time::Duration::from_secs(1);
-    let sleep_interval = tokio::time::Duration::from_secs(15);
-
-    let mut alien_client = AlienClient {
-        ..Default::default()
-    };
-
-    alien_client.init().await?;
-
-    loop {
-        metrics.scrape_counter.inc();
-
-        let values = alien_client.get_metrics().await;
-
-        if let Ok(values) = values {
-            record_metrics(&metrics, values)?;
-            tokio::time::sleep(sleep_interval).await
-        } else {
-            println!("DEBUG: Session expired. Logging in again");
-            alien_client.login().await?;
-            alien_client.capture_metrics_token().await?;
-            tokio::time::sleep(one_sec).await
-        }
-    }
-}
-
 #[derive(Default, Debug, Clone)]
 pub struct AlienClient {
     client: Client,
-    login_token: String,
     session_cookie: String,
     metrics_token: String,
 }
 
-#[async_trait]
-pub trait AlienClientMethods {
-    async fn init(&mut self) -> Result<(), AlienError>;
-    async fn capture_login_token(&mut self) -> Result<(), AlienError>;
-    async fn capture_metrics_token(&mut self) -> Result<(), AlienError>;
-    async fn login(&mut self) -> Result<(), AlienError>;
-    async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError>;
-    fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError>;
-}
-
-#[async_trait]
-impl AlienClientMethods for AlienClient {
+impl AlienClient {
     fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError> {
         let path = "cookie.txt";
 
@@ -204,20 +103,7 @@ impl AlienClientMethods for AlienClient {
         Ok(client)
     }
 
-    async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
-        // Step 3: Get the metrics token
-
-        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
-        let info_url = format!("http://{bridge_ip}/info.php");
-        let metrics_token_response = self.client.get(info_url).send().await?.text().await?;
-
-        self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
-            .ok_or(AlienError::MetricsTokenMissingError)?
-            .to_string();
-        Ok(())
-    }
-
-    async fn capture_login_token(&mut self) -> Result<(), AlienError> {
+    async fn get_login_token(&self) -> Result<String, AlienError> {
         // Step 1: Get login token
 
         let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
@@ -226,13 +112,13 @@ impl AlienClientMethods for AlienClient {
 
         // println!("_BB: {:?}", &login_token_response);
 
-        self.login_token = find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
-            .ok_or(AlienError::LoginTokenMissingError(
-                login_token_response.clone(),
-            ))?
-            .to_string();
-
-        Ok(())
+        Ok(
+            find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
+                .ok_or(AlienError::LoginTokenMissingError(
+                    login_token_response.clone(),
+                ))?
+                .to_string(),
+        )
     }
 
     async fn login(&mut self) -> Result<(), AlienError> {
@@ -240,10 +126,11 @@ impl AlienClientMethods for AlienClient {
 
         self.client = reqwest::Client::builder().cookie_store(true).build()?;
 
-        self.capture_login_token().await?;
-
         let router_password = env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD");
-        let login_params = [("token", &self.login_token), ("password", &router_password)];
+        let login_params = [
+            ("token", &self.get_login_token().await?),
+            ("password", &router_password),
+        ];
 
         let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
         let login_url = format!("http://{bridge_ip}/login.php");
@@ -286,6 +173,19 @@ impl AlienClientMethods for AlienClient {
         }
     }
 
+    async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
+        // Step 3: Get the metrics token
+
+        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
+        let info_url = format!("http://{bridge_ip}/info.php");
+        let metrics_token_response = self.client.get(info_url).send().await?.text().await?;
+
+        self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
+            .ok_or(AlienError::MetricsTokenMissingError)?
+            .to_string();
+        Ok(())
+    }
+
     async fn get_metrics(&self) -> Result<AlienMetricsRoot, AlienError> {
         // Step 4: pull metrics json
 
@@ -303,6 +203,47 @@ impl AlienClientMethods for AlienClient {
             .await?;
 
         Ok(res.to_vec())
+    }
+
+    fn record_metrics(
+        &self,
+        metrics: &Arc<Metrics>,
+        res: AlienMetricsRoot,
+    ) -> Result<(), AlienError> {
+        for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
+            for networks in serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.values()
+            {
+                for devices in networks.values() {
+                    for (device_mac, device) in devices {
+                        metrics
+                            .device_happiness_guage
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.happiness_score);
+                        metrics
+                            .device_signal_guage
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.signal_quality);
+                        metrics
+                            .device_rx_bitrate_guage
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.rx_bitrate);
+                        metrics
+                            .device_tx_bitrate_guage
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.tx_bitrate);
+                        metrics
+                            .device_rx_bytes_guage
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.rx_bytes);
+                        metrics
+                            .device_tx_bytes_guage
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.tx_bytes);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn init(&mut self) -> Result<(), AlienError> {
@@ -324,6 +265,58 @@ impl AlienClientMethods for AlienClient {
             self.capture_metrics_token().await?;
         }
         Ok(())
+    }
+}
+
+fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
+    match input.find(open) {
+        Some(index) => {
+            let start = index + open.len();
+            match input[start..].find(close) {
+                Some(index) if index > 0 => Some(&input[start..start + index]),
+                _ => None,
+            }
+        }
+        None => None,
+    }
+}
+
+async fn serve_req(State(metrics): State<Arc<Metrics>>) -> (StatusCode, String) {
+    let encoder = TextEncoder::new();
+
+    metrics.http_counter.inc();
+
+    let metric_families = prometheus::gather();
+    match encoder.encode_to_string(&metric_families) {
+        Ok(body) => (StatusCode::OK, body),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+    }
+}
+
+async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
+    let one_sec = tokio::time::Duration::from_secs(1);
+    let sleep_interval = tokio::time::Duration::from_secs(15);
+
+    let mut alien_client = AlienClient {
+        ..Default::default()
+    };
+
+    alien_client.init().await?;
+
+    loop {
+        metrics.scrape_counter.inc();
+
+        let values = alien_client.get_metrics().await;
+
+        if let Ok(values) = values {
+            alien_client.record_metrics(&metrics, values)?;
+            tokio::time::sleep(sleep_interval).await
+        } else {
+            println!("DEBUG: Session expired. Logging in again");
+            alien_client.login().await?;
+            alien_client.capture_metrics_token().await?;
+            tokio::time::sleep(one_sec).await
+        }
     }
 }
 
