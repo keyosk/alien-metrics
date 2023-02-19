@@ -28,7 +28,7 @@ static HTTP_COUNTER: Lazy<Counter> = Lazy::new(|| {
         "Number of HTTP requests made.",
         labels! {"handler" => "all",}
     ))
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static SCRAPE_COUNTER: Lazy<Counter> = Lazy::new(|| {
@@ -36,7 +36,7 @@ static SCRAPE_COUNTER: Lazy<Counter> = Lazy::new(|| {
         "scrape_requests_total",
         "Number of times scraped alien metrics endpoint.",
     ))
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static DEVICE_HAPPINESS_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
@@ -45,7 +45,7 @@ static DEVICE_HAPPINESS_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
         "The Happiness score of each device.",
         &["mac", "name"]
     )
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static DEVICE_SIGNAL_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
@@ -54,7 +54,7 @@ static DEVICE_SIGNAL_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
         "The Signal score of each device.",
         &["mac", "name"]
     )
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static DEVICE_RX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
@@ -63,7 +63,7 @@ static DEVICE_RX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
         "The rx bitrate of each device.",
         &["mac", "name"]
     )
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static DEVICE_TX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
@@ -72,7 +72,7 @@ static DEVICE_TX_BITRATE_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
         "The tx bitrate of each device.",
         &["mac", "name"]
     )
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static DEVICE_RX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
@@ -81,7 +81,7 @@ static DEVICE_RX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
         "The rx bytes of each device.",
         &["mac", "name"]
     )
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 static DEVICE_TX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
@@ -90,7 +90,7 @@ static DEVICE_TX_BYTES_GAUGE: Lazy<GaugeVec> = Lazy::new(|| {
         "The tx bytes of each device.",
         &["mac", "name"]
     )
-    .unwrap()
+    .expect("UNABLE TO REGISTER METRIC")
 });
 
 #[derive(Error, Debug)]
@@ -178,6 +178,9 @@ impl DeviceInfo for Device {
         }
     }
 }
+
+type AlienMetricsRoot = HashMap<String, Value>;
+type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
 fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
     match input.find(open) {
@@ -275,7 +278,7 @@ async fn get_metrics_token(client: &Client) -> Result<String, AlienError> {
 async fn get_metrics(
     client: &Client,
     metrics_token: &str,
-) -> Result<Vec<HashMap<String, Value>>, AlienError> {
+) -> Result<Vec<AlienMetricsRoot>, AlienError> {
     // Step 4: pull metrics json
 
     let metrics_params = [("do", "full"), ("token", metrics_token)];
@@ -288,48 +291,42 @@ async fn get_metrics(
         .form(&metrics_params)
         .send()
         .await?
-        .json::<Vec<HashMap<String, Value>>>()
+        .json::<Vec<AlienMetricsRoot>>()
         .await?;
 
     Ok(res)
 }
 
 fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
-    let mut res_array = res.iter();
-
-    for (_router_mac, frequencies) in res_array
-        .nth(1)
+    for (_router_mac, frequencies) in res
+        .get(1)
         .ok_or(AlienError::DevicesParseError)?
         .to_owned()
         .iter()
     {
-        for (_frequency, b) in serde_json::from_value::<
-            HashMap<String, HashMap<String, HashMap<String, Device>>>,
-        >(frequencies.to_owned())?
-        .iter()
+        for (_frequency, networks) in
+            serde_json::from_value::<AlienMetrics>(frequencies.to_owned())?.iter()
         {
-            for (user_network, devices) in b.iter() {
-                if user_network == "User network" {
-                    for (device_mac, device) in devices {
-                        DEVICE_HAPPINESS_GAUGE
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.happiness_score);
-                        DEVICE_SIGNAL_GAUGE
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.signal_quality);
-                        DEVICE_RX_BITRATE_GAUGE
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.rx_bitrate);
-                        DEVICE_TX_BITRATE_GAUGE
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.tx_bitrate);
-                        DEVICE_RX_BYTES_GAUGE
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.rx_bytes);
-                        DEVICE_TX_BYTES_GAUGE
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.tx_bytes);
-                    }
+            for (_network, devices) in networks.iter() {
+                for (device_mac, device) in devices {
+                    DEVICE_HAPPINESS_GAUGE
+                        .with_label_values(&[device_mac, device.get_name()])
+                        .set(device.happiness_score);
+                    DEVICE_SIGNAL_GAUGE
+                        .with_label_values(&[device_mac, device.get_name()])
+                        .set(device.signal_quality);
+                    DEVICE_RX_BITRATE_GAUGE
+                        .with_label_values(&[device_mac, device.get_name()])
+                        .set(device.rx_bitrate);
+                    DEVICE_TX_BITRATE_GAUGE
+                        .with_label_values(&[device_mac, device.get_name()])
+                        .set(device.tx_bitrate);
+                    DEVICE_RX_BYTES_GAUGE
+                        .with_label_values(&[device_mac, device.get_name()])
+                        .set(device.rx_bytes);
+                    DEVICE_TX_BYTES_GAUGE
+                        .with_label_values(&[device_mac, device.get_name()])
+                        .set(device.tx_bytes);
                 }
             }
         }
