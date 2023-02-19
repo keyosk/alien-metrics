@@ -69,15 +69,16 @@ pub struct AlienClient {
     pub client: Client,
     pub session_cookie: String,
     pub metrics_token: String,
+    pub bridge_ip: String,
 }
 
 impl AlienClient {
     pub async fn new() -> Result<Self, AlienError> {
         let (client, session_cookie) =
-            if let Ok((client, session_cookie)) = Self::get_client_with_old_cookie() {
+            if let Ok((client, session_cookie)) = Self::get_reqwest_client_with_cached_cookie() {
                 (client, session_cookie)
             } else {
-                let client = reqwest::Client::builder().cookie_store(true).build()?;
+                let client = get_reqwest_client()?;
 
                 (client, String::new())
             };
@@ -86,6 +87,7 @@ impl AlienClient {
             client,
             session_cookie,
             metrics_token: String::default(),
+            bridge_ip: env::var("BRIDGE_IP").expect("env BRIDGE_IP"),
         };
 
         if client.session_cookie.is_empty() {
@@ -102,14 +104,13 @@ impl AlienClient {
         Ok(client)
     }
 
-    fn get_client_with_old_cookie() -> Result<(Client, String), AlienError> {
+    fn get_reqwest_client_with_cached_cookie() -> Result<(Client, String), AlienError> {
         let path = "cookie.txt";
         let session_cookie = std::fs::read_to_string(path)?;
 
         let jar = Jar::default();
 
-        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
-        let url = format!("http://{bridge_ip}");
+        let url = format!("http://{}", env::var("BRIDGE_IP").expect("env BRIDGE_IP"));
         jar.add_cookie_str(&session_cookie, &url.parse()?);
 
         let client = reqwest::Client::builder()
@@ -123,8 +124,7 @@ impl AlienClient {
     async fn get_login_token(&self) -> Result<String, AlienError> {
         // Step 1: Get login token
 
-        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
-        let login_url = format!("http://{bridge_ip}/login.php");
+        let login_url = format!("http://{}/login.php", self.bridge_ip);
         let login_token_response = self.client.get(login_url).send().await?.text().await?;
 
         // println!("_BB: {:?}", &login_token_response);
@@ -141,7 +141,7 @@ impl AlienClient {
     async fn login(&mut self) -> Result<(), AlienError> {
         // Step 2: Login and get session cookie
 
-        self.client = reqwest::Client::builder().cookie_store(true).build()?;
+        self.client = get_reqwest_client()?;
 
         let router_password = env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD");
         let login_params = [
@@ -149,8 +149,7 @@ impl AlienClient {
             ("password", &router_password),
         ];
 
-        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
-        let login_url = format!("http://{bridge_ip}/login.php");
+        let login_url = format!("http://{}/login.php", self.bridge_ip);
         let res = self
             .client
             .post(login_url)
@@ -193,8 +192,7 @@ impl AlienClient {
     async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
         // Step 3: Get the metrics token
 
-        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
-        let info_url = format!("http://{bridge_ip}/info.php");
+        let info_url = format!("http://{}/info.php", self.bridge_ip);
         let metrics_token_response = self.client.get(info_url).send().await?.text().await?;
 
         self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
@@ -214,8 +212,7 @@ impl AlienClient {
 
         let metrics_params = [("do", "full"), ("token", &self.metrics_token)];
 
-        let bridge_ip = env::var("BRIDGE_IP").expect("env BRIDGE_IP");
-        let info_url = format!("http://{bridge_ip}/info-async.php");
+        let info_url = format!("http://{}/info-async.php", self.bridge_ip);
         let res = &self
             .client
             .post(info_url)
@@ -281,4 +278,8 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
         }
         None => None,
     }
+}
+
+fn get_reqwest_client() -> Result<Client, reqwest::Error> {
+    reqwest::Client::builder().cookie_store(true).build()
 }

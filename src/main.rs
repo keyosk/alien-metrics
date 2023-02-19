@@ -39,8 +39,8 @@ async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), AlienError> {
-    let metrics = Arc::new(Metrics::new()?);
+async fn main() {
+    let metrics = Arc::new(Metrics::new().unwrap());
     let addr = "0.0.0.0:9898".parse().unwrap();
     println!("Listening on http://{}", addr);
 
@@ -57,6 +57,4 @@ async fn main() -> Result<(), AlienError> {
             eprintln!("ERROR: Login or Parse error, double check credentials and connectivity")
         },
     }
-
-    Ok(())
 }
