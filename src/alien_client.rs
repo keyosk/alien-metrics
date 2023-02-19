@@ -4,6 +4,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, env, fs::File, io::Write, sync::Arc};
+use tokio::time::Duration;
 use tracing::info;
 
 type AlienInfoRoot = Vec<HashMap<String, Value>>;
@@ -85,9 +86,8 @@ impl AlienClient {
             client.login().await?;
         }
 
-        if client.capture_metrics_token().await.is_err() {
-            // It's possible the cached session cookie is no longer valid
-            // If the next login and capture fails, bail out with error
+        if let Err(e) = client.capture_metrics_token().await {
+            info!("Unable to capture initial metrics token: {:?}", e);
             client.re_login().await?;
         }
 
@@ -98,7 +98,14 @@ impl AlienClient {
         // Step 1: Get login token
 
         let login_url = format!("http://{}/login.php", self.bridge_ip);
-        let login_token_response = self.client.get(login_url).send().await?.text().await?;
+        let login_token_response = self
+            .client
+            .get(login_url)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?
+            .text()
+            .await?;
 
         Ok(
             find_pattern(&login_token_response, r#"name='token' value='"#, r#"'"#)
@@ -122,6 +129,7 @@ impl AlienClient {
             .client
             .post(login_url)
             .form(&login_params)
+            .timeout(Duration::from_secs(5))
             .send()
             .await?;
 
@@ -162,19 +170,30 @@ impl AlienClient {
             .client
             .get(info_url)
             .header("cookie", &self.session_cookie)
+            .timeout(Duration::from_secs(5))
             .send()
-            .await?
+            .await
+            .map_err(|_| {
+                AlienError::MetricsTokenMissingError(String::from("unable to send request"))
+            })?
             .text()
-            .await?;
+            .await
+            .map_err(|_| {
+                AlienError::MetricsTokenMissingError(String::from(
+                    "unable to retrieve response body",
+                ))
+            })?;
 
         self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
-            .ok_or(AlienError::MetricsTokenMissingError)?
+            .ok_or(AlienError::MetricsTokenMissingError(String::from(
+                "unable to find token in response",
+            )))?
             .to_string();
         Ok(())
     }
 
     pub async fn re_login(&mut self) -> Result<(), AlienError> {
-        info!("Session expired. Logging in again");
+        info!("Logging in again...");
         self.login().await?;
         self.capture_metrics_token().await?;
         Ok(())
@@ -191,6 +210,7 @@ impl AlienClient {
             .post(info_url)
             .form(&metrics_params)
             .header("cookie", &self.session_cookie)
+            .timeout(Duration::from_secs(5))
             .send()
             .await?
             .json::<AlienInfoRoot>()

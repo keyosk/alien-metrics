@@ -11,7 +11,7 @@ pub enum AlienError {
     #[error("login error")]
     CookieError(#[from] reqwest::header::ToStrError),
     #[error("metrics token missing error")]
-    MetricsTokenMissingError,
+    MetricsTokenMissingError(String),
     #[error("invalid password error")]
     InvalidPasswordError(String),
     #[error("login token missing error")]
@@ -20,12 +20,10 @@ pub enum AlienError {
     DevicesParseError,
     #[error("metrics parse error")]
     MetricsParseError(#[from] serde_json::Error),
-    #[error("server error")]
-    ServerError(#[from] axum::Error),
-    #[error("server 2 error")]
-    Server2Error(#[from] axum::http::Error),
-    #[error("server 3 error")]
-    Server3Error(#[from] prometheus::Error),
-    #[error("unknown error")]
-    Unknown,
+    #[error("axum error")]
+    AxumError(#[from] axum::Error),
+    #[error("axum http error")]
+    AxumHTTPError(#[from] axum::http::Error),
+    #[error("prometheus error")]
+    PrometheusError(#[from] prometheus::Error),
 }

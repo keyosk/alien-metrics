@@ -21,14 +21,18 @@ async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     loop {
         metrics.scrape_counter.inc();
 
-        let device_info = alien_client.get_info().await;
-
-        if let Ok(device_info) = device_info {
-            alien_client.record_metrics(&metrics, device_info)?;
-            sleep(sleep_interval).await
-        } else {
-            alien_client.re_login().await?;
-            sleep(one_sec).await
+        match alien_client.get_info().await {
+            Ok(device_info) => {
+                // TODO: capture subsequent error here as a metric and keep spinning the loop
+                alien_client.record_metrics(&metrics, device_info)?;
+                sleep(sleep_interval).await
+            }
+            Err(e) => {
+                error!("Unable to retrieve info from alien: {:?}", e);
+                // TODO: capture subsequent error here as a metric and keep spinning the loop
+                alien_client.re_login().await?;
+                sleep(one_sec).await
+            }
         }
     }
 }
