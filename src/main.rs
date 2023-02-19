@@ -124,20 +124,6 @@ pub enum AlienError {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RouterInfo {
-    pub cost: i64,
-    pub friendly_name: String,
-    pub ip: String,
-    pub level: i64,
-    pub mac: String,
-    pub platform_name: String,
-    pub protocol: i64,
-    pub region_lock: String,
-    pub role: String,
-    pub uptime: i64,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct Device {
     pub address: String,
@@ -311,59 +297,42 @@ async fn get_metrics(
 fn print_metrics(res: Vec<HashMap<String, Value>>) -> Result<(), AlienError> {
     let mut res_array = res.iter();
 
-    // remove first item from res_array, it's the router info
-    let ri: RouterInfo = serde_json::from_value(
-        res_array
-            .next()
-            .ok_or(AlienError::DevicesParseError)?
-            .values()
-            .next()
-            .ok_or(AlienError::DevicesParseError)?
-            .to_owned(),
-    )?;
-
-    // println!("router_info: {:?}", ri);
-
-    // remove the second item from res_array, it's a complex map of devices
-    let frequencies: HashMap<String, HashMap<String, HashMap<String, Device>>> =
-        serde_json::from_value(
-            res_array
-                .next()
-                .ok_or(AlienError::DevicesParseError)?
-                .get(&ri.mac)
-                .ok_or(AlienError::DevicesParseError)?
-                .to_owned(),
-        )?;
-
-    for (_frequency, devices_by_frequency) in frequencies {
-        // println!("\nfrequency: {:?}\n", frequency);
-
-        let devices = devices_by_frequency
-            .get("User network")
-            .ok_or(AlienError::DevicesParseError)?;
-
-        for (device_mac, device) in devices {
-            // println!("{} = {:?}\n", device_mac, device);
-            DEVICE_HAPPINESS_GAUGE
-                .with_label_values(&[device_mac, device.get_name()])
-                .set(device.happiness_score);
-            DEVICE_SIGNAL_GAUGE
-                .with_label_values(&[device_mac, device.get_name()])
-                .set(device.signal_quality);
-            DEVICE_RX_BITRATE_GAUGE
-                .with_label_values(&[device_mac, device.get_name()])
-                .set(device.rx_bitrate);
-            DEVICE_TX_BITRATE_GAUGE
-                .with_label_values(&[device_mac, device.get_name()])
-                .set(device.tx_bitrate);
-            DEVICE_RX_BYTES_GAUGE
-                .with_label_values(&[device_mac, device.get_name()])
-                .set(device.rx_bytes);
-            DEVICE_TX_BYTES_GAUGE
-                .with_label_values(&[device_mac, device.get_name()])
-                .set(device.tx_bytes);
+    for (_router_mac, frequencies) in res_array
+        .nth(1)
+        .ok_or(AlienError::DevicesParseError)?
+        .to_owned()
+        .iter()
+    {
+        for (_frequency, b) in serde_json::from_value::<
+            HashMap<String, HashMap<String, HashMap<String, Device>>>,
+        >(frequencies.to_owned())?
+        .iter()
+        {
+            for (user_network, devices) in b.iter() {
+                if user_network == "User network" {
+                    for (device_mac, device) in devices {
+                        DEVICE_HAPPINESS_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.happiness_score);
+                        DEVICE_SIGNAL_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.signal_quality);
+                        DEVICE_RX_BITRATE_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.rx_bitrate);
+                        DEVICE_TX_BITRATE_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.tx_bitrate);
+                        DEVICE_RX_BYTES_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.rx_bytes);
+                        DEVICE_TX_BYTES_GAUGE
+                            .with_label_values(&[device_mac, device.get_name()])
+                            .set(device.tx_bytes);
+                    }
+                }
+            }
         }
-        // println!("---");
     }
     Ok(())
 }

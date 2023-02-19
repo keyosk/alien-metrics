@@ -682,7 +682,8 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green"
+                  "color": "green",
+                  "value": null
                 },
                 {
                   "color": "red",
@@ -774,7 +775,8 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green"
+                  "color": "green",
+                  "value": null
                 },
                 {
                   "color": "red",
@@ -879,7 +881,8 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green"
+                  "color": "green",
+                  "value": null
                 },
                 {
                   "color": "red",
@@ -971,7 +974,8 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "green"
+                  "color": "green",
+                  "value": null
                 },
                 {
                   "color": "red",
@@ -1019,6 +1023,7 @@
         "type": "timeseries"
       }
     ],
+    "refresh": "30s",
     "schemaVersion": 37,
     "style": "dark",
     "tags": [],
@@ -1033,6 +1038,6 @@
     "timezone": "",
     "title": "Alien Router Metrics",
     "uid": "alien-router-metrics",
-    "version": 10,
+    "version": 11,
     "weekStart": ""
   }
