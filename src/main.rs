@@ -179,7 +179,7 @@ impl DeviceInfo for Device {
     }
 }
 
-type AlienMetricsRoot = HashMap<String, Value>;
+type AlienMetricsRoot = Vec<HashMap<String, Value>>;
 type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
 fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> {
@@ -275,10 +275,7 @@ async fn get_metrics_token(client: &Client) -> Result<String, AlienError> {
     Ok(String::from(metrics_token))
 }
 
-async fn get_metrics(
-    client: &Client,
-    metrics_token: &str,
-) -> Result<Vec<AlienMetricsRoot>, AlienError> {
+async fn get_metrics(client: &Client, metrics_token: &str) -> Result<AlienMetricsRoot, AlienError> {
     // Step 4: pull metrics json
 
     let metrics_params = [("do", "full"), ("token", metrics_token)];
@@ -291,7 +288,7 @@ async fn get_metrics(
         .form(&metrics_params)
         .send()
         .await?
-        .json::<Vec<AlienMetricsRoot>>()
+        .json::<AlienMetricsRoot>()
         .await?;
 
     Ok(res)
