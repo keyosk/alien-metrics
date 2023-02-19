@@ -4,13 +4,13 @@ use prometheus::TextEncoder;
 use std::sync::Arc;
 use tokio::{
     select,
-    signal::{
-        ctrl_c,
-        unix::{signal, SignalKind},
-    },
+    signal::ctrl_c,
     time::{sleep, Duration},
 };
 use tracing::{error, info};
+
+#[cfg(unix)]
+use tokio::signal::unix::{signal, SignalKind};
 
 async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     let one_sec = Duration::from_secs(1);
