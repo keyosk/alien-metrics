@@ -20,11 +20,7 @@ async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     let one_sec = tokio::time::Duration::from_secs(1);
     let sleep_interval = tokio::time::Duration::from_secs(15);
 
-    let mut alien_client = AlienClient {
-        ..Default::default()
-    };
-
-    alien_client.init().await?;
+    let mut alien_client = AlienClient::new().await?;
 
     loop {
         metrics.scrape_counter.inc();

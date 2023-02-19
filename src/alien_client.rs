@@ -71,7 +71,7 @@ impl DeviceInfo for Device {
 type AlienMetricsRoot = Vec<HashMap<String, Value>>;
 type AlienMetrics = HashMap<String, HashMap<String, HashMap<String, Device>>>;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct AlienClient {
     pub client: Client,
     pub session_cookie: String,
@@ -79,6 +79,34 @@ pub struct AlienClient {
 }
 
 impl AlienClient {
+    pub async fn new() -> Result<Self, AlienError> {
+        let mut client = Self {
+            client: Client::default(),
+            session_cookie: String::default(),
+            metrics_token: String::default(),
+        };
+
+        client.client = {
+            if let Ok(client) = client.get_client_with_old_cookie() {
+                client
+            } else {
+                reqwest::Client::builder().cookie_store(true).build()?
+            }
+        };
+
+        println!("logging in...");
+        client.login().await?;
+
+        if client.capture_metrics_token().await.is_err() {
+            // It's possible the cached session cookie is no longer valid
+            // If the next login and capture fails, bail out with error
+            client.login().await?;
+            client.capture_metrics_token().await?;
+        }
+
+        Ok(client)
+    }
+
     fn get_client_with_old_cookie(&mut self) -> Result<Client, AlienError> {
         let path = "cookie.txt";
 
@@ -242,27 +270,6 @@ impl AlienClient {
                     }
                 }
             }
-        }
-        Ok(())
-    }
-
-    pub async fn init(&mut self) -> Result<(), AlienError> {
-        self.client = {
-            if let Ok(client) = self.get_client_with_old_cookie() {
-                client
-            } else {
-                reqwest::Client::builder().cookie_store(true).build()?
-            }
-        };
-        if self.session_cookie.is_empty() {
-            println!("Empty session token.... logging in...");
-            self.login().await?;
-        }
-        if self.capture_metrics_token().await.is_err() {
-            // It's possible the cached session cookie is no longer valid
-            // If the next login and capture fails, bail out with error
-            self.login().await?;
-            self.capture_metrics_token().await?;
         }
         Ok(())
     }
