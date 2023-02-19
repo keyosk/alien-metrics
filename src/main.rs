@@ -19,18 +19,20 @@ async fn main_loop(metrics: Arc<Metrics>) -> Result<(), AlienError> {
     let mut alien_client = AlienClient::new().await?;
 
     loop {
-        metrics.scrape_counter.inc();
-
         match alien_client.get_info().await {
             Ok(device_info) => {
+                metrics.scrape_counter.inc();
                 // TODO: capture subsequent error here as a metric and keep spinning the loop
                 alien_client.record_metrics(&metrics, device_info)?;
                 sleep(sleep_interval).await
             }
             Err(e) => {
+                metrics.scrape_error_counter.inc();
                 error!("Unable to retrieve info from alien: {:?}", e);
-                // TODO: capture subsequent error here as a metric and keep spinning the loop
-                alien_client.re_login().await?;
+                if let Err(e) = alien_client.re_login().await {
+                    // TODO: capture metric
+                    error!("Subsequent login failure: {:?}", e);
+                }
                 sleep(one_sec).await
             }
         }
@@ -89,13 +91,13 @@ async fn main() {
 
     select! {
         res = serve_future => {
-            if res.is_err() {
-                error!("Metrics endpoint serve failure: {:?}", res);
+            if let Err(e) = res {
+                error!("Metrics endpoint serve failure: {:?}", e);
             }
         },
         res = main_loop(metrics) => {
-            if res.is_err() {
-                error!("Login or Parse error, double check credentials and connectivity: {:?}", res);
+            if let Err(e) = res {
+                error!("Login or Parse error, double check credentials and connectivity: {:?}", e);
             }
         },
     }

@@ -4,6 +4,7 @@ use prometheus::{labels, opts, register_counter, register_gauge_vec, Counter, Ga
 pub struct Metrics {
     pub http_counter: Counter,
     pub scrape_counter: Counter,
+    pub scrape_error_counter: Counter,
     pub device_happiness_guage: GaugeVec,
     pub device_signal_guage: GaugeVec,
     pub device_rx_bitrate_guage: GaugeVec,
@@ -23,6 +24,10 @@ impl Metrics {
             scrape_counter: register_counter!(opts!(
                 "scrape_requests_total",
                 "Number of times scraped alien metrics endpoint.",
+            ))?,
+            scrape_error_counter: register_counter!(opts!(
+                "scrape_requests_error_total",
+                "Number of times scraped alien metrics endpoint and failed.",
             ))?,
             device_happiness_guage: register_gauge_vec!(
                 "device_happiness",
