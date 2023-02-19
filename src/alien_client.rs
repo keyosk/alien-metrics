@@ -284,3 +284,163 @@ fn get_cached_cookie() -> String {
 fn set_cached_cookie(session_cookie: &str) -> Result<(), std::io::Error> {
     write!(File::create("cookie.txt")?, "{}", session_cookie)
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::{AlienClient, AlienError, AlienInfoRoot, Client};
+    use mockito::Server;
+
+    #[tokio::test]
+    async fn test_get_info() {
+        let mut server = Server::new_async().await;
+
+        let client = AlienClient {
+            client: Client::default(),
+            session_cookie: String::default(),
+            metrics_token: String::default(),
+            bridge_ip: server.host_with_port(),
+            password: String::default(),
+        };
+
+        let mock_data = r#"
+        [
+            {
+                "35:1E:CF:75:09:15": {
+                    "cost": 0,
+                    "friendly_name": "very cool ssid",
+                    "ip": "192.168.188.1",
+                    "level": 1,
+                    "mac": "35:1E:CF:75:09:15",
+                    "platform_name": "AFi-ALN-R",
+                    "protocol": 139,
+                    "region_lock": "US",
+                    "role": "Router",
+                    "uptime": 481485
+                }
+            },
+            {
+                "35:1E:CF:75:09:15": {
+                    "2.4 GHz": {
+                        "User network": {
+                            "0F:4C:53:B9:5C:BF": {
+                                "Address": "192.168.188.221",
+                                "Description": "Device One",
+                                "HappinessScore": 80,
+                                "Inactive": 0,
+                                "LeaseValidity": 37834,
+                                "MaxBandwidth": 20,
+                                "MaxSpatialStreams": 2,
+                                "Mode": "802.11n",
+                                "RxBitrate": 72200,
+                                "RxBytes": 3309662,
+                                "RxMcs": 7,
+                                "RxMhz": 20,
+                                "SignalQuality": 64,
+                                "TxBitrate": 14400,
+                                "TxBytes": 354499,
+                                "TxMcs": 1,
+                                "TxMhz": 20
+                            },
+                            "0A:C6:8A:ED:D0:E9": {
+                                "Address": "192.168.188.173",
+                                "HappinessScore": 85,
+                                "Inactive": 0,
+                                "LeaseValidity": 25076,
+                                "MaxBandwidth": 20,
+                                "MaxSpatialStreams": 2,
+                                "Mode": "802.11n",
+                                "RxBitrate": 72200,
+                                "RxBytes": 15714154,
+                                "RxBytes_15sec": 1474,
+                                "RxBytes_30sec": 3168,
+                                "RxBytes_5sec": 458,
+                                "RxBytes_60sec": 6662,
+                                "RxMcs": 7,
+                                "RxMhz": 20,
+                                "SignalQuality": 66,
+                                "TxBitrate": 72200,
+                                "TxBytes": 11576926,
+                                "TxBytes_15sec": 2672,
+                                "TxBytes_30sec": 6108,
+                                "TxBytes_5sec": 798,
+                                "TxBytes_60sec": 12898,
+                                "TxMcs": 7,
+                                "TxMhz": 20
+                            }
+                        }
+                    },
+                    "5 GHz": {
+                        "User network": {
+                            "BF:2D:B9:49:5E:01": {
+                                "Address": "192.168.188.232",
+                                "Description": "Device Three",
+                                "HappinessScore": 100,
+                                "Inactive": 0,
+                                "MaxBandwidth": 80,
+                                "MaxSpatialStreams": 2,
+                                "Mode": "802.11ac",
+                                "RadioMode": "802.11ax",
+                                "RxBitrate": 780000,
+                                "RxBytes": 14394016,
+                                "RxMcs": 8,
+                                "RxMhz": 80,
+                                "SignalQuality": 87,
+                                "TxBitrate": 26000,
+                                "TxBytes": 2363319,
+                                "TxBytes_15sec": 42,
+                                "TxBytes_30sec": 42,
+                                "TxBytes_60sec": 84,
+                                "TxMcs": 3,
+                                "TxMhz": 20
+                            },
+                            "00:2C:72:AA:29:4D": {
+                                "Address": "192.168.188.203",
+                                "Description": "Device Four",
+                                "HappinessScore": 100,
+                                "HostName": "Device-Four",
+                                "Inactive": 0,
+                                "LeaseValidity": 23460,
+                                "MaxBandwidth": 80,
+                                "MaxSpatialStreams": 3,
+                                "Mode": "802.11ac",
+                                "RadioMode": "802.11ax",
+                                "RxBitrate": 650000,
+                                "RxBytes": 166225659,
+                                "RxBytes_15sec": 17732,
+                                "RxBytes_30sec": 21523,
+                                "RxBytes_5sec": 5470,
+                                "RxBytes_60sec": 45730,
+                                "RxMcs": 7,
+                                "RxMhz": 80,
+                                "SignalQuality": 66,
+                                "TxBitrate": 351000,
+                                "TxBytes": 36059004,
+                                "TxBytes_15sec": 18909,
+                                "TxBytes_30sec": 32437,
+                                "TxBytes_5sec": 303,
+                                "TxBytes_60sec": 58971,
+                                "TxMcs": 3,
+                                "TxMhz": 80
+                            }
+                        }
+                    }
+                }
+            }
+        ]"#;
+
+        let get_info_mock = server
+            .mock("POST", "/info-async.php")
+            .with_body(mock_data)
+            .create_async()
+            .await;
+
+        let info: Result<AlienInfoRoot, AlienError> = client.get_info().await;
+
+        // Ensure info was parsed into the expected
+        assert!(info.is_ok(), "failed to parse info");
+
+        // Ensure mock was called
+        get_info_mock.assert_async().await;
+    }
+}

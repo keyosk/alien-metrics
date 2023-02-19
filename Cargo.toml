@@ -3,6 +3,9 @@ name = "alien-metrics"
 version = "0.1.0"
 edition = "2021"
 
+[dev-dependencies]
+mockito = "0"
+
 [dependencies]
 axum = "0.6"
 prometheus = "0.13"
