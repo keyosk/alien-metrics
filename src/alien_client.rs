@@ -1,6 +1,6 @@
 use crate::errors::AlienError;
 use crate::metrics::Metrics;
-use reqwest::{cookie::Jar, Client};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, env, fs::File, io::Write, sync::Arc};
@@ -74,14 +74,13 @@ pub struct AlienClient {
 
 impl AlienClient {
     pub async fn new() -> Result<Self, AlienError> {
-        let (client, session_cookie) =
-            if let Ok((client, session_cookie)) = Self::get_reqwest_client_with_cached_cookie() {
-                (client, session_cookie)
-            } else {
-                let client = get_reqwest_client()?;
+        let client = get_reqwest_client()?;
 
-                (client, String::new())
-            };
+        let session_cookie = if let Ok(session_cookie) = get_cached_cookie() {
+            session_cookie
+        } else {
+            String::new()
+        };
 
         let mut client = Self {
             client,
@@ -104,23 +103,6 @@ impl AlienClient {
         Ok(client)
     }
 
-    fn get_reqwest_client_with_cached_cookie() -> Result<(Client, String), AlienError> {
-        let path = "cookie.txt";
-        let session_cookie = std::fs::read_to_string(path)?;
-
-        let jar = Jar::default();
-
-        let url = format!("http://{}", env::var("BRIDGE_IP").expect("env BRIDGE_IP"));
-        jar.add_cookie_str(&session_cookie, &url.parse()?);
-
-        let client = reqwest::Client::builder()
-            .cookie_store(true)
-            .cookie_provider(jar.into())
-            .build()?;
-
-        Ok((client, session_cookie))
-    }
-
     async fn get_login_token(&self) -> Result<String, AlienError> {
         // Step 1: Get login token
 
@@ -140,8 +122,6 @@ impl AlienClient {
 
     async fn login(&mut self) -> Result<(), AlienError> {
         // Step 2: Login and get session cookie
-
-        self.client = get_reqwest_client()?;
 
         let router_password = env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD");
         let login_params = [
@@ -193,7 +173,14 @@ impl AlienClient {
         // Step 3: Get the metrics token
 
         let info_url = format!("http://{}/info.php", self.bridge_ip);
-        let metrics_token_response = self.client.get(info_url).send().await?.text().await?;
+        let metrics_token_response = self
+            .client
+            .get(info_url)
+            .header("cookie", &self.session_cookie)
+            .send()
+            .await?
+            .text()
+            .await?;
 
         self.metrics_token = find_pattern(&metrics_token_response, r#"var token='"#, r#"'"#)
             .ok_or(AlienError::MetricsTokenMissingError)?
@@ -217,6 +204,7 @@ impl AlienClient {
             .client
             .post(info_url)
             .form(&metrics_params)
+            .header("cookie", &self.session_cookie)
             .send()
             .await?
             .json::<AlienMetricsRoot>()
@@ -281,5 +269,10 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
 }
 
 fn get_reqwest_client() -> Result<Client, reqwest::Error> {
-    reqwest::Client::builder().cookie_store(true).build()
+    reqwest::Client::builder().build()
+}
+
+fn get_cached_cookie() -> Result<String, std::io::Error> {
+    let path = "cookie.txt";
+    std::fs::read_to_string(path)
 }
