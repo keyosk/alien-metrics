@@ -6,8 +6,8 @@ pub enum AlienError {
     ReqwestError(#[from] reqwest::Error),
     #[error("token cache r/w error")]
     TokenCacheError(#[from] std::io::Error),
-    #[error("env BRIDGE_IP error")]
-    BridgeIPError(#[from] url::ParseError),
+    #[error("env ROUTER_HOST error")]
+    RouterHostError(#[from] url::ParseError),
     #[error("login error")]
     CookieError(#[from] reqwest::header::ToStrError),
     #[error("metrics token missing error")]

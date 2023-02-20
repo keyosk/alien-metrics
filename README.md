@@ -4,7 +4,7 @@
 
 ```bash
 export ROUTER_PASSWORD='SEKRIT'
-export BRIDGE_IP='192.168.188.1'
+export ROUTER_HOST='amplifi.lan'
 RUST_LOG=info cargo run
 ```
 

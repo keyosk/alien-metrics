@@ -70,7 +70,7 @@ pub struct AlienClient {
     client: Client,
     session_cookie: String,
     metrics_token: String,
-    bridge_ip: String,
+    host: String,
     password: String,
 }
 
@@ -80,7 +80,7 @@ impl AlienClient {
             client: Client::default(),
             session_cookie: get_cached_cookie(),
             metrics_token: String::default(),
-            bridge_ip: env::var("BRIDGE_IP").expect("env BRIDGE_IP"),
+            host: env::var("ROUTER_HOST").unwrap_or(String::from("amplifi.lan")),
             password: env::var("ROUTER_PASSWORD").expect("env ROUTER_PASSWORD"),
         };
 
@@ -100,7 +100,7 @@ impl AlienClient {
     async fn get_login_token(&self) -> Result<String, AlienError> {
         // Step 1: Get login token
 
-        let login_url = format!("http://{}/login.php", self.bridge_ip);
+        let login_url = format!("http://{}/login.php", self.host);
         let login_token_response = self
             .client
             .get(login_url)
@@ -127,7 +127,7 @@ impl AlienClient {
             ("password", &self.password),
         ];
 
-        let login_url = format!("http://{}/login.php", self.bridge_ip);
+        let login_url = format!("http://{}/login.php", self.host);
         let res = self
             .client
             .post(login_url)
@@ -168,7 +168,7 @@ impl AlienClient {
     async fn capture_metrics_token(&mut self) -> Result<(), AlienError> {
         // Step 3: Get the metrics token
 
-        let info_url = format!("http://{}/info.php", self.bridge_ip);
+        let info_url = format!("http://{}/info.php", self.host);
         let metrics_token_response = self
             .client
             .get(info_url)
@@ -207,7 +207,7 @@ impl AlienClient {
 
         let metrics_params = [("do", "full"), ("token", &self.metrics_token)];
 
-        let info_url = format!("http://{}/info-async.php", self.bridge_ip);
+        let info_url = format!("http://{}/info-async.php", self.host);
         let res = &self
             .client
             .post(info_url)
@@ -445,7 +445,7 @@ mod tests {
             client: Client::default(),
             session_cookie: String::default(),
             metrics_token: String::default(),
-            bridge_ip: server.host_with_port(),
+            host: server.host_with_port(),
             password: String::default(),
         };
 
@@ -472,7 +472,7 @@ mod tests {
             client: Client::default(),
             session_cookie: String::default(),
             metrics_token: String::default(),
-            bridge_ip: server.host_with_port(),
+            host: server.host_with_port(),
             password: String::default(),
         };
 
