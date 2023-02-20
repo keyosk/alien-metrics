@@ -95,7 +95,7 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "Bps"
         },
         "overrides": []
       },
@@ -131,7 +131,7 @@
           "refId": "A"
         }
       ],
-      "title": "Bytes In Rate",
+      "title": "Download Rate",
       "type": "timeseries"
     },
     {
@@ -188,34 +188,9 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "Bps"
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "2021 MBP - Cody - PubNub"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 9,
@@ -249,7 +224,7 @@
           "refId": "A"
         }
       ],
-      "title": "Bytes Out Rate",
+      "title": "Upload Rate",
       "type": "timeseries"
     },
     {
@@ -342,7 +317,7 @@
           "refId": "A"
         }
       ],
-      "title": "Bytes In Total",
+      "title": "Downloaded Total",
       "type": "timeseries"
     },
     {
@@ -435,7 +410,7 @@
           "refId": "A"
         }
       ],
-      "title": "Bytes Out Total",
+      "title": "Uploaded Total",
       "type": "timeseries"
     },
     {
@@ -691,7 +666,7 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "KBs"
         },
         "overrides": []
       },
@@ -784,7 +759,7 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "KBs"
         },
         "overrides": []
       },
@@ -1131,6 +1106,6 @@
   "timezone": "",
   "title": "Alien Router Metrics",
   "uid": "alien-router-metrics",
-  "version": 12,
+  "version": 13,
   "weekStart": ""
 }
