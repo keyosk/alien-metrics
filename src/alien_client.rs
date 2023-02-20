@@ -19,6 +19,7 @@ struct Device {
     host_name: String,
     inactive: f64,
     lease_validity: f64,
+    mac: String,
     max_bandwidth: f64,
     max_spatial_streams: f64,
     mode: String,
@@ -224,30 +225,30 @@ impl AlienClient {
         metrics: &Arc<Metrics>,
         res: AlienInfoRoot,
     ) -> Result<(), AlienError> {
-        for (device_mac, device) in get_devices(res)? {
+        for device in get_devices(res)? {
             metrics
                 .device_happiness_guage
-                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.happiness_score);
             metrics
                 .device_signal_guage
-                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.signal_quality);
             metrics
                 .device_rx_bitrate_guage
-                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.rx_bitrate);
             metrics
                 .device_tx_bitrate_guage
-                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.tx_bitrate);
             metrics
                 .device_rx_bytes_guage
-                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.rx_bytes);
             metrics
                 .device_tx_bytes_guage
-                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.tx_bytes);
         }
         Ok(())
@@ -279,13 +280,14 @@ fn set_cached_cookie(session_cookie: &str) -> Result<(), std::io::Error> {
     write!(File::create("cookie.txt")?, "{}", session_cookie)
 }
 
-fn get_devices(res: AlienInfoRoot) -> Result<Vec<(String, Device)>, AlienError> {
-    let mut devices_vec: Vec<(String, Device)> = vec![];
+fn get_devices(res: AlienInfoRoot) -> Result<Vec<Device>, AlienError> {
+    let mut devices_vec: Vec<Device> = vec![];
     for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
-        for networks in serde_json::from_value::<AlienInfo>(frequencies.to_owned())?.values() {
-            for devices in networks.values() {
+        for networks in serde_json::from_value::<AlienInfo>(frequencies.to_owned())?.values_mut() {
+            for devices in networks.values_mut() {
                 for (device_mac, device) in devices {
-                    devices_vec.push((device_mac.to_owned(), device.to_owned()));
+                    device.mac = device_mac.to_string();
+                    devices_vec.push(device.to_owned());
                 }
             }
         }
@@ -481,5 +483,19 @@ mod tests {
         let devices = get_devices(info.unwrap()).unwrap();
 
         assert_eq!(devices.len(), 4, "failed to find 4 devices");
+
+        let expected_macs = vec![
+            String::from("0F:4C:53:B9:5C:BF"),
+            String::from("0A:C6:8A:ED:D0:E9"),
+            String::from("BF:2D:B9:49:5E:01"),
+            String::from("00:2C:72:AA:29:4D"),
+        ];
+
+        for device in devices {
+            assert!(
+                expected_macs.contains(&device.mac),
+                "expected mac addresses not found"
+            );
+        }
     }
 }
