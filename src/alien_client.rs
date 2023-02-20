@@ -224,37 +224,31 @@ impl AlienClient {
         metrics: &Arc<Metrics>,
         res: AlienInfoRoot,
     ) -> Result<(), AlienError> {
-        for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
-            for networks in serde_json::from_value::<AlienInfo>(frequencies.to_owned())?.values() {
-                for devices in networks.values() {
-                    for (device_mac, device) in devices {
-                        metrics
-                            .device_happiness_guage
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.happiness_score);
-                        metrics
-                            .device_signal_guage
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.signal_quality);
-                        metrics
-                            .device_rx_bitrate_guage
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.rx_bitrate);
-                        metrics
-                            .device_tx_bitrate_guage
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.tx_bitrate);
-                        metrics
-                            .device_rx_bytes_guage
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.rx_bytes);
-                        metrics
-                            .device_tx_bytes_guage
-                            .with_label_values(&[device_mac, device.get_name()])
-                            .set(device.tx_bytes);
-                    }
-                }
-            }
+        for (device_mac, device) in get_devices(res)? {
+            metrics
+                .device_happiness_guage
+                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .set(device.happiness_score);
+            metrics
+                .device_signal_guage
+                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .set(device.signal_quality);
+            metrics
+                .device_rx_bitrate_guage
+                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .set(device.rx_bitrate);
+            metrics
+                .device_tx_bitrate_guage
+                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .set(device.tx_bitrate);
+            metrics
+                .device_rx_bytes_guage
+                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .set(device.rx_bytes);
+            metrics
+                .device_tx_bytes_guage
+                .with_label_values(&[device_mac.as_str(), device.get_name()])
+                .set(device.tx_bytes);
         }
         Ok(())
     }
@@ -285,11 +279,151 @@ fn set_cached_cookie(session_cookie: &str) -> Result<(), std::io::Error> {
     write!(File::create("cookie.txt")?, "{}", session_cookie)
 }
 
+fn get_devices(res: AlienInfoRoot) -> Result<Vec<(String, Device)>, AlienError> {
+    let mut devices_vec: Vec<(String, Device)> = vec![];
+    for frequencies in res.get(1).ok_or(AlienError::DevicesParseError)?.values() {
+        for networks in serde_json::from_value::<AlienInfo>(frequencies.to_owned())?.values() {
+            for devices in networks.values() {
+                for (device_mac, device) in devices {
+                    devices_vec.push((device_mac.to_owned(), device.to_owned()));
+                }
+            }
+        }
+    }
+    Ok(devices_vec)
+}
+
 #[cfg(test)]
 mod tests {
 
-    use super::{AlienClient, AlienError, AlienInfoRoot, Client};
+    use super::{get_devices, AlienClient, AlienError, AlienInfoRoot, Client};
     use mockito::Server;
+
+    static MOCK_DATA: &str = r#"
+    [
+        {
+            "35:1E:CF:75:09:15": {
+                "cost": 0,
+                "friendly_name": "very cool ssid",
+                "ip": "192.168.188.1",
+                "level": 1,
+                "mac": "35:1E:CF:75:09:15",
+                "platform_name": "AFi-ALN-R",
+                "protocol": 139,
+                "region_lock": "US",
+                "role": "Router",
+                "uptime": 481485
+            }
+        },
+        {
+            "35:1E:CF:75:09:15": {
+                "2.4 GHz": {
+                    "User network": {
+                        "0F:4C:53:B9:5C:BF": {
+                            "Address": "192.168.188.221",
+                            "Description": "Device One",
+                            "HappinessScore": 80,
+                            "Inactive": 0,
+                            "LeaseValidity": 37834,
+                            "MaxBandwidth": 20,
+                            "MaxSpatialStreams": 2,
+                            "Mode": "802.11n",
+                            "RxBitrate": 72200,
+                            "RxBytes": 3309662,
+                            "RxMcs": 7,
+                            "RxMhz": 20,
+                            "SignalQuality": 64,
+                            "TxBitrate": 14400,
+                            "TxBytes": 354499,
+                            "TxMcs": 1,
+                            "TxMhz": 20
+                        },
+                        "0A:C6:8A:ED:D0:E9": {
+                            "Address": "192.168.188.173",
+                            "HappinessScore": 85,
+                            "Inactive": 0,
+                            "LeaseValidity": 25076,
+                            "MaxBandwidth": 20,
+                            "MaxSpatialStreams": 2,
+                            "Mode": "802.11n",
+                            "RxBitrate": 72200,
+                            "RxBytes": 15714154,
+                            "RxBytes_15sec": 1474,
+                            "RxBytes_30sec": 3168,
+                            "RxBytes_5sec": 458,
+                            "RxBytes_60sec": 6662,
+                            "RxMcs": 7,
+                            "RxMhz": 20,
+                            "SignalQuality": 66,
+                            "TxBitrate": 72200,
+                            "TxBytes": 11576926,
+                            "TxBytes_15sec": 2672,
+                            "TxBytes_30sec": 6108,
+                            "TxBytes_5sec": 798,
+                            "TxBytes_60sec": 12898,
+                            "TxMcs": 7,
+                            "TxMhz": 20
+                        }
+                    }
+                },
+                "5 GHz": {
+                    "User network": {
+                        "BF:2D:B9:49:5E:01": {
+                            "Address": "192.168.188.232",
+                            "Description": "Device Three",
+                            "HappinessScore": 100,
+                            "Inactive": 0,
+                            "MaxBandwidth": 80,
+                            "MaxSpatialStreams": 2,
+                            "Mode": "802.11ac",
+                            "RadioMode": "802.11ax",
+                            "RxBitrate": 780000,
+                            "RxBytes": 14394016,
+                            "RxMcs": 8,
+                            "RxMhz": 80,
+                            "SignalQuality": 87,
+                            "TxBitrate": 26000,
+                            "TxBytes": 2363319,
+                            "TxBytes_15sec": 42,
+                            "TxBytes_30sec": 42,
+                            "TxBytes_60sec": 84,
+                            "TxMcs": 3,
+                            "TxMhz": 20
+                        },
+                        "00:2C:72:AA:29:4D": {
+                            "Address": "192.168.188.203",
+                            "Description": "Device Four",
+                            "HappinessScore": 100,
+                            "HostName": "Device-Four",
+                            "Inactive": 0,
+                            "LeaseValidity": 23460,
+                            "MaxBandwidth": 80,
+                            "MaxSpatialStreams": 3,
+                            "Mode": "802.11ac",
+                            "RadioMode": "802.11ax",
+                            "RxBitrate": 650000,
+                            "RxBytes": 166225659,
+                            "RxBytes_15sec": 17732,
+                            "RxBytes_30sec": 21523,
+                            "RxBytes_5sec": 5470,
+                            "RxBytes_60sec": 45730,
+                            "RxMcs": 7,
+                            "RxMhz": 80,
+                            "SignalQuality": 66,
+                            "TxBitrate": 351000,
+                            "TxBytes": 36059004,
+                            "TxBytes_15sec": 18909,
+                            "TxBytes_30sec": 32437,
+                            "TxBytes_5sec": 303,
+                            "TxBytes_60sec": 58971,
+                            "TxMcs": 3,
+                            "TxMhz": 80
+                        }
+                    }
+                }
+            }
+        }
+    ]"#;
 
     #[tokio::test]
     async fn test_get_info() {
@@ -303,144 +437,49 @@ mod tests {
             password: String::default(),
         };
 
-        let mock_data = r#"
-        [
-            {
-                "35:1E:CF:75:09:15": {
-                    "cost": 0,
-                    "friendly_name": "very cool ssid",
-                    "ip": "192.168.188.1",
-                    "level": 1,
-                    "mac": "35:1E:CF:75:09:15",
-                    "platform_name": "AFi-ALN-R",
-                    "protocol": 139,
-                    "region_lock": "US",
-                    "role": "Router",
-                    "uptime": 481485
-                }
-            },
-            {
-                "35:1E:CF:75:09:15": {
-                    "2.4 GHz": {
-                        "User network": {
-                            "0F:4C:53:B9:5C:BF": {
-                                "Address": "192.168.188.221",
-                                "Description": "Device One",
-                                "HappinessScore": 80,
-                                "Inactive": 0,
-                                "LeaseValidity": 37834,
-                                "MaxBandwidth": 20,
-                                "MaxSpatialStreams": 2,
-                                "Mode": "802.11n",
-                                "RxBitrate": 72200,
-                                "RxBytes": 3309662,
-                                "RxMcs": 7,
-                                "RxMhz": 20,
-                                "SignalQuality": 64,
-                                "TxBitrate": 14400,
-                                "TxBytes": 354499,
-                                "TxMcs": 1,
-                                "TxMhz": 20
-                            },
-                            "0A:C6:8A:ED:D0:E9": {
-                                "Address": "192.168.188.173",
-                                "HappinessScore": 85,
-                                "Inactive": 0,
-                                "LeaseValidity": 25076,
-                                "MaxBandwidth": 20,
-                                "MaxSpatialStreams": 2,
-                                "Mode": "802.11n",
-                                "RxBitrate": 72200,
-                                "RxBytes": 15714154,
-                                "RxBytes_15sec": 1474,
-                                "RxBytes_30sec": 3168,
-                                "RxBytes_5sec": 458,
-                                "RxBytes_60sec": 6662,
-                                "RxMcs": 7,
-                                "RxMhz": 20,
-                                "SignalQuality": 66,
-                                "TxBitrate": 72200,
-                                "TxBytes": 11576926,
-                                "TxBytes_15sec": 2672,
-                                "TxBytes_30sec": 6108,
-                                "TxBytes_5sec": 798,
-                                "TxBytes_60sec": 12898,
-                                "TxMcs": 7,
-                                "TxMhz": 20
-                            }
-                        }
-                    },
-                    "5 GHz": {
-                        "User network": {
-                            "BF:2D:B9:49:5E:01": {
-                                "Address": "192.168.188.232",
-                                "Description": "Device Three",
-                                "HappinessScore": 100,
-                                "Inactive": 0,
-                                "MaxBandwidth": 80,
-                                "MaxSpatialStreams": 2,
-                                "Mode": "802.11ac",
-                                "RadioMode": "802.11ax",
-                                "RxBitrate": 780000,
-                                "RxBytes": 14394016,
-                                "RxMcs": 8,
-                                "RxMhz": 80,
-                                "SignalQuality": 87,
-                                "TxBitrate": 26000,
-                                "TxBytes": 2363319,
-                                "TxBytes_15sec": 42,
-                                "TxBytes_30sec": 42,
-                                "TxBytes_60sec": 84,
-                                "TxMcs": 3,
-                                "TxMhz": 20
-                            },
-                            "00:2C:72:AA:29:4D": {
-                                "Address": "192.168.188.203",
-                                "Description": "Device Four",
-                                "HappinessScore": 100,
-                                "HostName": "Device-Four",
-                                "Inactive": 0,
-                                "LeaseValidity": 23460,
-                                "MaxBandwidth": 80,
-                                "MaxSpatialStreams": 3,
-                                "Mode": "802.11ac",
-                                "RadioMode": "802.11ax",
-                                "RxBitrate": 650000,
-                                "RxBytes": 166225659,
-                                "RxBytes_15sec": 17732,
-                                "RxBytes_30sec": 21523,
-                                "RxBytes_5sec": 5470,
-                                "RxBytes_60sec": 45730,
-                                "RxMcs": 7,
-                                "RxMhz": 80,
-                                "SignalQuality": 66,
-                                "TxBitrate": 351000,
-                                "TxBytes": 36059004,
-                                "TxBytes_15sec": 18909,
-                                "TxBytes_30sec": 32437,
-                                "TxBytes_5sec": 303,
-                                "TxBytes_60sec": 58971,
-                                "TxMcs": 3,
-                                "TxMhz": 80
-                            }
-                        }
-                    }
-                }
-            }
-        ]"#;
-
         let get_info_mock = server
             .mock("POST", "/info-async.php")
-            .with_body(mock_data)
+            .with_body(MOCK_DATA)
             .create_async()
             .await;
 
         let info: Result<AlienInfoRoot, AlienError> = client.get_info().await;
 
+        // Ensure mock was called
+        get_info_mock.assert_async().await;
+
         // Ensure info was parsed into the expected
         assert!(info.is_ok(), "failed to parse info");
+    }
+
+    #[tokio::test]
+    async fn test_get_devices() {
+        let mut server = Server::new_async().await;
+
+        let client = AlienClient {
+            client: Client::default(),
+            session_cookie: String::default(),
+            metrics_token: String::default(),
+            bridge_ip: server.host_with_port(),
+            password: String::default(),
+        };
+
+        let get_info_mock = server
+            .mock("POST", "/info-async.php")
+            .with_body(MOCK_DATA)
+            .create_async()
+            .await;
+
+        let info: Result<AlienInfoRoot, AlienError> = client.get_info().await;
 
         // Ensure mock was called
         get_info_mock.assert_async().await;
+
+        // Ensure info was parsed into the expected
+        assert!(info.is_ok(), "failed to parse info");
+
+        let devices = get_devices(info.unwrap()).unwrap();
+
+        assert!(devices.len() == 4, "failed to find 4 devices");
     }
 }
