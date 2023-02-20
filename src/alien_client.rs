@@ -26,6 +26,7 @@ struct Device {
     radio_mode: String,
     rx_bitrate: f64,
     rx_bytes: f64,
+    rx_bytes64: f64,
     #[serde(rename = "RxBytes_5sec")]
     rx_bytes_5sec: f64,
     #[serde(rename = "RxBytes_15sec")]
@@ -39,6 +40,7 @@ struct Device {
     signal_quality: f64,
     tx_bitrate: f64,
     tx_bytes: f64,
+    tx_bytes64: f64,
     #[serde(rename = "TxBytes_5sec")]
     tx_bytes_5sec: f64,
     #[serde(rename = "TxBytes_15sec")]
@@ -227,29 +229,37 @@ impl AlienClient {
     ) -> Result<(), AlienError> {
         for device in get_devices(res)? {
             metrics
-                .device_happiness_guage
+                .device_happiness_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.happiness_score);
             metrics
-                .device_signal_guage
+                .device_signal_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.signal_quality);
             metrics
-                .device_rx_bitrate_guage
+                .device_rx_bitrate_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.rx_bitrate);
             metrics
-                .device_tx_bitrate_guage
+                .device_tx_bitrate_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.tx_bitrate);
             metrics
-                .device_rx_bytes_guage
+                .device_rx_bytes_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.rx_bytes);
             metrics
-                .device_tx_bytes_guage
+                .device_rx_bytes64_gauge
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
+                .set(device.rx_bytes64);
+            metrics
+                .device_tx_bytes_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.tx_bytes);
+            metrics
+                .device_tx_bytes64_gauge
+                .with_label_values(&[device.mac.as_str(), device.get_name()])
+                .set(device.tx_bytes64);
         }
         Ok(())
     }
