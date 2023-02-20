@@ -480,6 +480,6 @@ mod tests {
 
         let devices = get_devices(info.unwrap()).unwrap();
 
-        assert!(devices.len() == 4, "failed to find 4 devices");
+        assert_eq!(devices.len(), 4, "failed to find 4 devices");
     }
 }
