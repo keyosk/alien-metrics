@@ -249,17 +249,9 @@ impl AlienClient {
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.rx_bytes);
             metrics
-                .device_rx_bytes64_gauge
-                .with_label_values(&[device.mac.as_str(), device.get_name()])
-                .set(device.rx_bytes64);
-            metrics
                 .device_tx_bytes_gauge
                 .with_label_values(&[device.mac.as_str(), device.get_name()])
                 .set(device.tx_bytes);
-            metrics
-                .device_tx_bytes64_gauge
-                .with_label_values(&[device.mac.as_str(), device.get_name()])
-                .set(device.tx_bytes64);
         }
         Ok(())
     }

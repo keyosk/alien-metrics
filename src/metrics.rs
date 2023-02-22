@@ -10,9 +10,7 @@ pub struct Metrics {
     pub device_rx_bitrate_gauge: GaugeVec,
     pub device_tx_bitrate_gauge: GaugeVec,
     pub device_rx_bytes_gauge: GaugeVec,
-    pub device_rx_bytes64_gauge: GaugeVec,
     pub device_tx_bytes_gauge: GaugeVec,
-    pub device_tx_bytes64_gauge: GaugeVec,
 }
 
 impl Metrics {
@@ -56,19 +54,9 @@ impl Metrics {
                 "The rx bytes of each device.",
                 &["mac", "name"]
             )?,
-            device_rx_bytes64_gauge: register_gauge_vec!(
-                "device_rx_bytes64",
-                "The rx bytes 64 of each device.",
-                &["mac", "name"]
-            )?,
             device_tx_bytes_gauge: register_gauge_vec!(
                 "device_tx_bytes",
                 "The tx bytes of each device.",
-                &["mac", "name"]
-            )?,
-            device_tx_bytes64_gauge: register_gauge_vec!(
-                "device_tx_bytes64",
-                "The tx bytes 64 of each device.",
                 &["mac", "name"]
             )?,
         })
