@@ -44,8 +44,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Download Rate",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -122,10 +123,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "sum by(name) (increase(device_rx_bytes[$__interval]))",
+          "expr": "sum by(name) (increase(device_rx_bytes{instance=~\"$instance\", job=~\"$job\"}[$__interval]))",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -137,8 +138,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Upload Rate",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -215,10 +217,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "sum by(name) (increase(device_tx_bytes[$__interval]))",
+          "expr": "sum by(name) (increase(device_tx_bytes{instance=~\"$instance\", job=~\"$job\"}[$__interval]))",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -230,8 +232,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Downloaded Total",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,10 +311,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "device_rx_bytes",
+          "expr": "device_rx_bytes{instance=~\"$instance\", job=~\"$job\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -323,8 +326,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Uploaded Total",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -401,10 +405,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "device_tx_bytes",
+          "expr": "device_tx_bytes{instance=~\"$instance\", job=~\"$job\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -429,8 +433,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Happiness",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -507,10 +512,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "device_happiness",
+          "expr": "device_happiness{instance=~\"$instance\", job=~\"$job\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -522,8 +527,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Signal",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -600,10 +606,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "device_signal",
+          "expr": "device_signal{instance=~\"$instance\", job=~\"$job\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -615,8 +621,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Device RxBitrate",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -657,8 +664,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -693,10 +699,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "device_rx_bitrate",
+          "expr": "device_rx_bitrate{instance=~\"$instance\", job=~\"$job\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -708,8 +714,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Device TxBitrate",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -750,8 +757,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -786,10 +792,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "device_tx_bitrate",
+          "expr": "device_tx_bitrate{instance=~\"$instance\", job=~\"$job\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -814,8 +820,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Alien Metrics Scraped",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -856,8 +863,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -865,7 +871,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "opm"
         },
         "overrides": []
       },
@@ -892,10 +898,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "round(sum(increase(scrape_requests_total[$__interval])), 1)",
+          "expr": "round(sum(increase(scrape_requests_total{instance=~\"$instance\", job=~\"$job\"}[$__interval])), 1)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -907,8 +913,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Alien Metrics Scrape Errors",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -949,8 +956,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -958,7 +964,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "opm"
         },
         "overrides": []
       },
@@ -985,10 +991,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "round(sum(increase(scrape_requests_error_total[$__interval])), 1)",
+          "expr": "round(increase(scrape_requests_error_total{instance=~\"$instance\", job=~\"$job\"}[$__interval]), 1)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1000,8 +1006,9 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "grafanacloud-prom"
+        "uid": "${datasource}"
       },
+      "description": "Prometheus Endpoint Scraped",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1042,8 +1049,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1051,7 +1057,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "opm"
         },
         "overrides": []
       },
@@ -1078,10 +1084,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "grafanacloud-prom"
+            "uid": "${datasource}"
           },
           "editorMode": "builder",
-          "expr": "round(sum(increase(http_requests_total[$__interval])), 1)",
+          "expr": "round(increase(http_requests_total{instance=~\"$instance\", job=~\"$job\"}[$__interval]), 1)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1096,7 +1102,92 @@
   "style": "dark",
   "tags": [],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 2,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "/.*/",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "selected": false,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(instance)",
+        "description": "",
+        "hide": 2,
+        "includeAll": true,
+        "label": "instance",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(instance)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "selected": false,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(job)",
+        "description": "",
+        "hide": 2,
+        "includeAll": true,
+        "label": "job",
+        "multi": true,
+        "name": "job",
+        "options": [],
+        "query": {
+          "query": "label_values(job)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-15m",
@@ -1106,6 +1197,6 @@
   "timezone": "",
   "title": "Alien Router Metrics",
   "uid": "alien-router-metrics",
-  "version": 18,
+  "version": 1,
   "weekStart": ""
 }
