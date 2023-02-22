@@ -13,10 +13,15 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
+      - name: Grab go.mod
+        run: curl -s -L -o go.mod https://raw.githubusercontent.com/grafana/dashboard-linter/main/go.mod
+      - name: Grab go.sum
+        run: curl -s -L -o go.sum https://raw.githubusercontent.com/grafana/dashboard-linter/main/go.sum
       - name: Setup Golang
         uses: actions/setup-go@v3
         with:
-          go-version: 1.20.x
+          go-version: stable
+          cache: true
       - name: Install Grafana dashboard linter
         run: go install github.com/grafana/dashboard-linter@latest
       - name: Run Grafana dashboard linter
