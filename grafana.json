@@ -72,7 +72,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -125,7 +125,7 @@
             "uid": "grafanacloud-prom"
           },
           "editorMode": "builder",
-          "expr": "increase(device_rx_bytes[$__rate_interval])",
+          "expr": "sum by(name) (increase(device_rx_bytes[$__interval]))",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -165,7 +165,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -218,7 +218,7 @@
             "uid": "grafanacloud-prom"
           },
           "editorMode": "builder",
-          "expr": "increase(device_tx_bytes[$__rate_interval])",
+          "expr": "sum by(name) (increase(device_tx_bytes[$__interval]))",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -1106,6 +1106,6 @@
   "timezone": "",
   "title": "Alien Router Metrics",
   "uid": "alien-router-metrics",
-  "version": 16,
+  "version": 18,
   "weekStart": ""
 }
