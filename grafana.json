@@ -95,7 +95,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -125,7 +125,7 @@
             "uid": "grafanacloud-prom"
           },
           "editorMode": "builder",
-          "expr": "rate(device_rx_bytes[$__rate_interval])",
+          "expr": "increase(device_rx_bytes[$__rate_interval])",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -188,7 +188,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -218,7 +218,7 @@
             "uid": "grafanacloud-prom"
           },
           "editorMode": "builder",
-          "expr": "rate(device_tx_bytes[$__rate_interval])",
+          "expr": "increase(device_tx_bytes[$__rate_interval])",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -281,7 +281,7 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -374,7 +374,7 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -1106,6 +1106,6 @@
   "timezone": "",
   "title": "Alien Router Metrics",
   "uid": "alien-router-metrics",
-  "version": 13,
+  "version": 16,
   "weekStart": ""
 }
