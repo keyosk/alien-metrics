@@ -1,7 +1,15 @@
 name: CI
 on:
   push:
+    paths:
+    - 'src/**'
+    - 'Cargo.lock'
+    - 'Cargo.toml'
   pull_request:
+    paths:
+    - 'src/**'
+    - 'Cargo.lock'
+    - 'Cargo.toml'
   schedule:
     - cron: '0 0 * * 0'
 jobs:
