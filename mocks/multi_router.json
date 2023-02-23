@@ -1,0 +1,159 @@
+[
+    {
+        "35:1E:CF:75:09:15": {
+            "children": {
+                "wifi": {
+                    "D9:DD:86:B6:0E:CD": {
+                        "active_band": "5 GHz",
+                        "connected_from": 335139,
+                        "connected_to": 335138,
+                        "connections_from": 1,
+                        "connections_to": 1,
+                        "cost": 1,
+                        "first_connected": 335138,
+                        "friendly_name": "Secondary SSID",
+                        "ip": "192.168.188.239",
+                        "last_connected": 335138,
+                        "level": 2,
+                        "mac": "D9:DD:86:B6:0E:CD",
+                        "master_peer": "35:1E:CF:75:09:15",
+                        "platform_name": "AFi-ALN-P",
+                        "protocol": 139,
+                        "region_lock": "US",
+                        "role": "Extender",
+                        "rssi_min": -48,
+                        "uptime": 335234
+                    }
+                }
+            },
+            "cost": 0,
+            "friendly_name": "Primay SSID",
+            "ip": "192.168.188.1",
+            "level": 1,
+            "mac": "35:1E:CF:75:09:15",
+            "platform_name": "AFi-ALN-R",
+            "protocol": 139,
+            "region_lock": "US",
+            "role": "Router",
+            "uptime": 481485
+        }
+    },
+    {
+        "35:1E:CF:75:09:15": {
+            "2.4 GHz": {
+                "User network": {
+                    "0F:4C:53:B9:5C:BF": {
+                        "Address": "192.168.188.221",
+                        "Description": "Device One",
+                        "HappinessScore": 80,
+                        "Inactive": 0,
+                        "LeaseValidity": 37834,
+                        "MaxBandwidth": 20,
+                        "MaxSpatialStreams": 2,
+                        "Mode": "802.11n",
+                        "RxBitrate": 72200,
+                        "RxBytes": 3309662,
+                        "RxMcs": 7,
+                        "RxMhz": 20,
+                        "SignalQuality": 64,
+                        "TxBitrate": 14400,
+                        "TxBytes": 354499,
+                        "TxMcs": 1,
+                        "TxMhz": 20
+                    }
+                }
+            },
+            "5 GHz": {
+                "User network": {
+                    "BF:2D:B9:49:5E:01": {
+                        "Address": "192.168.188.232",
+                        "Description": "Device Three",
+                        "HappinessScore": 100,
+                        "Inactive": 0,
+                        "MaxBandwidth": 80,
+                        "MaxSpatialStreams": 2,
+                        "Mode": "802.11ac",
+                        "RadioMode": "802.11ax",
+                        "RxBitrate": 780000,
+                        "RxBytes": 14394016,
+                        "RxMcs": 8,
+                        "RxMhz": 80,
+                        "SignalQuality": 87,
+                        "TxBitrate": 26000,
+                        "TxBytes": 2363319,
+                        "TxBytes_15sec": 42,
+                        "TxBytes_30sec": 42,
+                        "TxBytes_60sec": 84,
+                        "TxMcs": 3,
+                        "TxMhz": 20
+                    }
+                }
+            }
+        },
+        "D9:DD:86:B6:0E:CD": {
+            "2.4 GHz": {
+                "User network": {
+                    "0A:C6:8A:ED:D0:E9": {
+                        "Address": "192.168.188.173",
+                        "HappinessScore": 85,
+                        "Inactive": 0,
+                        "LeaseValidity": 25076,
+                        "MaxBandwidth": 20,
+                        "MaxSpatialStreams": 2,
+                        "Mode": "802.11n",
+                        "RxBitrate": 72200,
+                        "RxBytes": 15714154,
+                        "RxBytes_15sec": 1474,
+                        "RxBytes_30sec": 3168,
+                        "RxBytes_5sec": 458,
+                        "RxBytes_60sec": 6662,
+                        "RxMcs": 7,
+                        "RxMhz": 20,
+                        "SignalQuality": 66,
+                        "TxBitrate": 72200,
+                        "TxBytes": 11576926,
+                        "TxBytes_15sec": 2672,
+                        "TxBytes_30sec": 6108,
+                        "TxBytes_5sec": 798,
+                        "TxBytes_60sec": 12898,
+                        "TxMcs": 7,
+                        "TxMhz": 20
+                    }
+                }
+            },
+            "5 GHz": {
+                "User network": {
+                    "00:2C:72:AA:29:4D": {
+                        "Address": "192.168.188.203",
+                        "Description": "Device Four",
+                        "HappinessScore": 100,
+                        "HostName": "Device-Four",
+                        "Inactive": 0,
+                        "LeaseValidity": 23460,
+                        "MaxBandwidth": 80,
+                        "MaxSpatialStreams": 3,
+                        "Mode": "802.11ac",
+                        "RadioMode": "802.11ax",
+                        "RxBitrate": 650000,
+                        "RxBytes": 166225659,
+                        "RxBytes_15sec": 17732,
+                        "RxBytes_30sec": 21523,
+                        "RxBytes_5sec": 5470,
+                        "RxBytes_60sec": 45730,
+                        "RxMcs": 7,
+                        "RxMhz": 80,
+                        "SignalQuality": 66,
+                        "TxBitrate": 351000,
+                        "TxBytes": 36059004,
+                        "TxBytes_15sec": 18909,
+                        "TxBytes_30sec": 32437,
+                        "TxBytes_5sec": 303,
+                        "TxBytes_60sec": 58971,
+                        "TxMcs": 3,
+                        "TxMhz": 80
+                    }
+                }
+            }
+        }
+    }
+]

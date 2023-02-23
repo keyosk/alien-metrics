@@ -3,11 +3,13 @@ on:
   push:
     paths:
     - 'src/**'
+    - 'mocks/**'
     - 'Cargo.lock'
     - 'Cargo.toml'
   pull_request:
     paths:
     - 'src/**'
+    - 'mocks/**'
     - 'Cargo.lock'
     - 'Cargo.toml'
   schedule:
