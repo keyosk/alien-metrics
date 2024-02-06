@@ -2,9 +2,11 @@ name: Grafana
 on:
   push:
     paths:
+    - '.github/workflows/grafana.yaml'
     - 'grafana.json'
   pull_request:
     paths:
+    - '.github/workflows/grafana.yaml'
     - 'grafana.json'
 jobs:
   lints:
