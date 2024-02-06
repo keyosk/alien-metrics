@@ -2,9 +2,11 @@ name: Grafana
 on:
   push:
     paths:
+    - '.github/workflows/grafana.yml'
     - 'grafana.json'
   pull_request:
     paths:
+    - '.github/workflows/grafana.yml'
     - 'grafana.json'
 jobs:
   lints:
@@ -12,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Grab go.mod
         run: curl -s -L -o go.mod https://raw.githubusercontent.com/grafana/dashboard-linter/main/go.mod
       - name: Grab go.sum
         run: curl -s -L -o go.sum https://raw.githubusercontent.com/grafana/dashboard-linter/main/go.sum
       - name: Setup Golang
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: stable
           cache: true
