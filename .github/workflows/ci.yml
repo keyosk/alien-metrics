@@ -2,14 +2,14 @@ name: CI
 on:
   push:
     paths:
-    - '.github/workflows/ci.yaml'
+    - '.github/workflows/ci.yml'
     - 'src/**'
     - 'mocks/**'
     - 'Cargo.lock'
     - 'Cargo.toml'
   pull_request:
     paths:
-    - '.github/workflows/ci.yaml'
+    - '.github/workflows/ci.yml'
     - 'src/**'
     - 'mocks/**'
     - 'Cargo.lock'
