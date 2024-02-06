@@ -1,8 +1,9 @@
 use alien_metrics::{AlienClient, AlienError, Metrics};
-use axum::{extract::State, http::StatusCode, routing::get, Router, Server};
+use axum::{extract::State, http::StatusCode, routing::get, Router};
 use prometheus::TextEncoder;
-use std::sync::Arc;
+use std::{future::IntoFuture, sync::Arc};
 use tokio::{
+    net::TcpListener,
     select, signal,
     time::{sleep, Duration},
 };
@@ -77,26 +78,32 @@ async fn shutdown_signal() {
 async fn main() {
     tracing_subscriber::fmt::init();
     let metrics = Arc::new(Metrics::new().unwrap());
-    let addr = "0.0.0.0:9898".parse().unwrap();
-    info!("Listening on http://{}/metrics", addr);
-
-    let app = Router::new()
-        .route("/metrics", get(serve_req))
-        .with_state(metrics.clone());
-    let serve_future = Server::bind(&addr)
-        .serve(app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal());
-
-    select! {
-        res = serve_future => {
-            if let Err(e) = res {
-                error!("Metrics endpoint serve failure: {:?}", e);
+    let addr = "0.0.0.0:9898";
+    info!("Attempting to listen on http://{}/metrics", addr);
+    match TcpListener::bind(&addr).await {
+        Ok(listener) => {
+            let app = Router::new()
+                .route("/metrics", get(serve_req))
+                .with_state(metrics.clone());
+            let serve_future = axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown_signal())
+                .into_future();
+            info!("Listening on http://{}/metrics", addr);
+            select! {
+                res = serve_future => {
+                    if let Err(e) = res {
+                        error!("Metrics endpoint serve failure: {:?}", e);
+                    }
+                },
+                res = main_loop(metrics) => {
+                    if let Err(e) = res {
+                        error!("Login or Parse error, double check credentials and connectivity: {:?}", e);
+                    }
+                },
             }
-        },
-        res = main_loop(metrics) => {
-            if let Err(e) = res {
-                error!("Login or Parse error, double check credentials and connectivity: {:?}", e);
-            }
-        },
+        }
+        Err(e) => {
+            error!("Unable to bind metrics port: {:?}", e)
+        }
     }
 }
