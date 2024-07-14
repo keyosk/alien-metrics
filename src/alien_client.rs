@@ -371,7 +371,7 @@ mod tests {
 
         assert_eq!(devices.len(), 4, "failed to find 4 devices");
 
-        let expected_macs = vec![
+        let expected_macs = [
             String::from("0F:4C:53:B9:5C:BF"),
             String::from("0A:C6:8A:ED:D0:E9"),
             String::from("BF:2D:B9:49:5E:01"),
@@ -442,7 +442,7 @@ mod tests {
 
         assert_eq!(devices.len(), 4, "failed to find 4 devices");
 
-        let expected_macs = vec![
+        let expected_macs = [
             String::from("0F:4C:53:B9:5C:BF"),
             String::from("0A:C6:8A:ED:D0:E9"),
             String::from("BF:2D:B9:49:5E:01"),
