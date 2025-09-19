@@ -271,11 +271,7 @@ fn find_pattern<'a>(input: &'a str, open: &str, close: &str) -> Option<&'a str> 
 }
 
 fn get_cached_cookie() -> String {
-    if let Ok(session_cookie) = std::fs::read_to_string("cookie.txt") {
-        session_cookie
-    } else {
-        String::new()
-    }
+    std::fs::read_to_string("cookie.txt").unwrap_or_default()
 }
 
 fn set_cached_cookie(session_cookie: &str) -> Result<(), std::io::Error> {
