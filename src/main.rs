@@ -1,5 +1,3 @@
-// test cache
-
 use alien_metrics::{AlienClient, AlienError, Metrics};
 use axum::{extract::State, http::StatusCode, routing::get, Router};
 use prometheus::TextEncoder;
