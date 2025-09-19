@@ -85,6 +85,10 @@ jobs:
           else
             echo "cargo-machete already installed: $(cargo-machete --version)"
           fi
+      - name: Cargo audit
+        run: cargo audit
+      - name: Cargo machete
+        run: cargo machete
       - name: Cargo check
         run: cargo check --workspace
       - name: Cargo fmt
@@ -93,9 +97,5 @@ jobs:
         run: cargo doc --workspace --no-deps
       - name: Cargo clippy
         run: cargo clippy --workspace --tests -- -D warnings
-      - name: Cargo audit
-        run: cargo audit
-      - name: Cargo machete
-        run: cargo machete
       - name: Cargo test
         run: cargo test --workspace
