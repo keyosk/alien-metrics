@@ -1,4 +1,12 @@
 name: CI
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -21,6 +29,12 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      RUST_BACKTRACE: short
     steps:
       - name: Checkout sources
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -31,7 +45,7 @@ jobs:
             ~/.rustup/toolchains
             ~/.rustup/update-hashes
             ~/.rustup/settings.toml
-          key: rust-toolchain-${{ runner.os }}-stable-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain') }}
+          key: rust-toolchain-${{ runner.os }}-stable-clippy-rustfmt
           restore-keys: |
             rust-toolchain-${{ runner.os }}-stable-
       - name: Install toolchain
@@ -54,10 +68,23 @@ jobs:
         with:
           path: ~/.cargo/bin
           key: cargo-tools-${{ runner.os }}-audit-machete
+          restore-keys: |
+            cargo-tools-${{ runner.os }}-
       - name: Install cargo-audit and cargo-machete
         run: |
-          command -v cargo-audit >/dev/null 2>&1 || cargo install --locked cargo-audit
-          command -v cargo-machete >/dev/null 2>&1 || cargo install --locked cargo-machete
+          set -e
+          if ! command -v cargo-audit >/dev/null 2>&1; then
+            echo "Installing cargo-audit..."
+            cargo install --locked cargo-audit
+          else
+            echo "cargo-audit already installed: $(cargo-audit --version)"
+          fi
+          if ! command -v cargo-machete >/dev/null 2>&1; then
+            echo "Installing cargo-machete..."
+            cargo install --locked cargo-machete
+          else
+            echo "cargo-machete already installed: $(cargo-machete --version)"
+          fi
       - name: Cargo check
         run: cargo check --workspace
       - name: Cargo fmt
