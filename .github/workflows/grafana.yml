@@ -10,8 +10,8 @@ on:
     - '.github/workflows/grafana.yml'
     - 'grafana.json'
 jobs:
-  lints:
-    name: Lints
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
