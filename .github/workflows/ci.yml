@@ -54,6 +54,8 @@ jobs:
           command -v cargo-machete >/dev/null 2>&1 || cargo install --locked cargo-machete
       - name: Cargo check
         run: cargo check --workspace
+      - name: Pre-compile for tests
+        run: cargo test --workspace --no-run
       - name: Cargo fmt
         run: cargo fmt --all -- --check
       - name: Cargo doc
