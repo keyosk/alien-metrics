@@ -18,8 +18,8 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 jobs:
-  lint:
-    name: Lint
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
