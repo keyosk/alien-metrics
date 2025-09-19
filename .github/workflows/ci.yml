@@ -54,8 +54,6 @@ jobs:
           command -v cargo-machete >/dev/null 2>&1 || cargo install --locked cargo-machete
       - name: Cargo check
         run: cargo check --workspace
-      - name: Pre-compile for tests
-        run: cargo test --workspace --no-run
       - name: Cargo fmt
         run: cargo fmt --all -- --check
       - name: Cargo doc
@@ -66,31 +64,5 @@ jobs:
         run: cargo audit
       - name: Cargo machete
         run: cargo machete
-
-  tests:
-    name: Test
-    runs-on: ubuntu-latest
-    needs: [lint]
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Cache Rust toolchain
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/update-hashes
-            ~/.rustup/settings.toml
-          key: rust-toolchain-${{ runner.os }}-stable-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain') }}
-          restore-keys: |
-            rust-toolchain-${{ runner.os }}-stable-
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # latest
-        with:
-          toolchain: stable
-      - name: Rust cache
-        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
-        with:
-          shared-key: ci
       - name: Cargo test
         run: cargo test --workspace
