@@ -16,6 +16,13 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Cache Go dependencies
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            go.mod
+            go.sum
+          key: grafana-deps-${{ hashFiles('grafana.json') }}
       - name: Grab go.mod
         run: curl -s -L -o go.mod https://raw.githubusercontent.com/grafana/dashboard-linter/main/go.mod
       - name: Grab go.sum
@@ -23,7 +30,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: stable
+          go-version: '1.25.1'
           cache: true
       - name: Install Grafana dashboard linter
         run: go install github.com/grafana/dashboard-linter@latest
