@@ -28,7 +28,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - name: Install toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8b59fc3b3d5efdf07b7c04fbb1b90a4a69 # v1
+        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # latest
         with:
           toolchain: ${{ matrix.rust }}
       - name: Rust cache
@@ -45,7 +45,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - name: Install toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8b59fc3b3d5efdf07b7c04fbb1b90a4a69 # v1
+        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # latest
         with:
           toolchain: stable
           components: clippy, rustfmt
@@ -78,7 +78,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - name: Install toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8b59fc3b3d5efdf07b7c04fbb1b90a4a69 # v1
+        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # latest
         with:
           toolchain: ${{ matrix.rust }}
       - name: Rust cache
